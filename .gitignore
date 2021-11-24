@@ -1,0 +1,52 @@
+# Folders
+/bin/*
+!/bin/SDL2.dll
+!/bin/SDL2.lib
+!/bin/SDL2main.lib
+!/bin/myres.rc
+!/bin/myres.res
+
+/res/fonts/*
+
+/res/particles_images/*
+/res/sounds/not_using/*
+/res/img/*
+!/res/img/fantasy_sprites
+!/res/img/temp_images
+!/res/img/environment_splats
+
+
+
+
+#/SDL2/*
+#/res/*
+#!/res/scenes/
+#!/res/shaders/
+#!/res/tweaker_file.txt
+#!/res/font/fontAtlas_UbuntuMono-Regular_1.png
+#!/res/font/fontAtlas_UbuntuMono-Regular_1.png
+
+# Object files
+*.o
+*.ko
+*.elf
+
+# Linker output
+*.ilk
+*.map
+*.exp
+
+# Executables
+*.exe
+*.out
+*.app
+*.i*86
+*.x86_64
+*.hex
+
+# Debug files
+*.dSYM/
+*.su
+*.idb
+*.pdb
+
