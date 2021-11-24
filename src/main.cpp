@@ -56,9 +56,10 @@ static void updateEditor() {
 			//NOTE: Process our command buffer
 			for(int i = 0; i < global_platformInput.keyInputCommand_count; ++i) {
 			    PlatformKeyType command = global_platformInput.keyInputCommandBuffer[i];
-			    if(command == PLATFORM_KEY_BACKSPACE) {
+			    if(command == PLATFORM_KEY_BACKSPACE && b->cursorAt_inBytes > 0) {
 			       u32 bytesOfPrevRune = 1;
-			       removeTextFromBuffer(b, b->cursorAt_inBytes, bytesOfPrevRune);
+			       removeTextFromBuffer(b, b->cursorAt_inBytes - 1, bytesOfPrevRune);
+			       b->cursorAt_inBytes -= bytesOfPrevRune;
 			        
 			    }
 

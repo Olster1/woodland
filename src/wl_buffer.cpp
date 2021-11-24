@@ -96,7 +96,7 @@ static void endGapBuffer(WL_Buffer *b) {
 		int gapDiff = b->gapBuffer_endAt - b->gapBuffer_startAt;
 
 		//NOTE: Move all memory down to fill the gap
-		for(int i = b->gapBuffer_endAt; i < b->bufferSize_inUse_inBytes; i++) {
+		for(int i = 0; i < (b->bufferSize_inUse_inBytes - b->gapBuffer_endAt); i++) {
 			b->bufferMemory[b->gapBuffer_startAt + i] = b->bufferMemory[b->gapBuffer_startAt + gapDiff + i];
 		}
 
@@ -114,7 +114,8 @@ static void endGapBuffer(WL_Buffer *b) {
 
 
 static void removeTextFromBuffer(WL_Buffer *b, int bytesStart, int toRemoveCount_inBytes) {
-	{
+	{	
+		//NOTE: See if has an active gap
 		int gapDiff = b->gapBuffer_endAt - b->gapBuffer_startAt;
 		
 		//NOTE: No active gap
@@ -122,7 +123,6 @@ static void removeTextFromBuffer(WL_Buffer *b, int bytesStart, int toRemoveCount
 			b->gapBuffer_startAt = bytesStart; 
 			b->gapBuffer_endAt = bytesStart + toRemoveCount_inBytes;
 		} else {
-			assert(bytesStart == b->gapBuffer_startAt);
 			assert((b->gapBuffer_startAt - toRemoveCount_inBytes) >= 0);
 			b->gapBuffer_startAt -= toRemoveCount_inBytes;
 		}
