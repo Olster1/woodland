@@ -1,10 +1,10 @@
-#define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #define UNICODE
 #include <assert.h>
 #include <d3d11_1.h>
 #include <d3dcompiler.h>
 #include <windows.h>
+#include <shobjidl.h>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "../libs/stb_image.h"
@@ -27,6 +27,7 @@
 
 
 static PlatformLayer global_platform;
+static HWND global_wndHandle;
 
 #define DEFINES_BACKGROUND_COLOR 0.1f, 0.1f, 0.1f, 1 
 
@@ -224,8 +225,13 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 
     } else if(msg == WM_KEYDOWN || msg == WM_KEYUP || msg == WM_SYSKEYDOWN || msg == WM_SYSKEYUP) {
 
-        bool keyWasDown = ((lparam & (1 << 30)) == 0);
-        bool keyIsDown =   !(lparam & (1 << 31));
+        bool keyWasDown = ((lparam & (1 << 30)) != 0);
+
+        // char str[256];
+        // sprintf(str, "%d\n", (u32)lparam);
+        // OutputDebugStringA((char *)str);
+
+        bool keyIsDown = ((lparam & (1 << 31)) == 0);
 
         WPARAM vk_code = wparam;        
 
@@ -254,7 +260,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
             keyType = PLATFORM_KEY_X;
         } else if(vk_code == 'O') {
             keyType = PLATFORM_KEY_O;
-        } else if(vk_code == VK_LCONTROL) {
+        } else if(vk_code == VK_CONTROL) {
             keyType = PLATFORM_KEY_LEFT_CTRL;
         } else if(vk_code == VK_BACK) {
             keyType = PLATFORM_KEY_BACKSPACE;
@@ -318,10 +324,38 @@ static u8 *platform_realloc_memory(void *src, u32 bytesToMove, size_t sizeToAllo
 
 }
 
+static void Platform_OpenFile_withDialog() {
+    OPENFILENAME config = {};
+    config.lStructSize = sizeof(OPENFILENAME);
+    config.hwndOwner = global_wndHandle; // Put the owner window handle here.
+    config.lpstrFilter = L"\0\0"; // Put the file extension here.
+    wchar_t path[MAX_PATH];
+    path[0] = 0;
+    config.lpstrFile = path;
+    config.lpstrDefExt = L"cpp" + 1;
+    config.nMaxFile = sizeof(path) / sizeof(path[0]);
+    config.Flags = OFN_FILEMUSTEXIST;
+    config.Flags |= OFN_NOCHANGEDIR;//To prevent GetOpenFileName() from changing the working directory
+
+    if (GetOpenFileNameW(&config)) {
+        // `path` contains the file
+        OutputDebugStringW(path);
+    }
+}
+
 
 static bool Platform_LoadEntireFile(char *filename_utf8, void **data, size_t *data_size)
 {
-    LPCWSTR filename = (LPCWSTR)filename_utf8;
+    int characterCount = MultiByteToWideChar(CP_UTF8, 0, filename_utf8, -1, 0, 0);
+
+    u32 sizeInBytes = characterCount*sizeof(u16);
+
+    LPWSTR filename = (LPWSTR)Win32HeapAlloc(sizeInBytes, false);
+
+    int sizeCheck = MultiByteToWideChar(CP_UTF8, 0, filename_utf8, -1, filename, characterCount);
+
+    assert(sizeCheck != 0);
+
     bool read_successful = 0;
     
     *data = 0;
@@ -362,6 +396,8 @@ static bool Platform_LoadEntireFile(char *filename_utf8, void **data, size_t *da
             CloseHandle(file);
         }
     }
+
+    Win32HeapFree(filename);
     
     return read_successful;
 }
@@ -419,6 +455,8 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int
             return GetLastError();
         }
     }
+
+    global_wndHandle = hwnd;
 
     // Create D3D11 Device and Context
     ID3D11Device1* d3d11Device;

@@ -102,14 +102,38 @@ static void updateEditor() {
 
 	//////////////////////////////////////////////////////// 
 
+	if(global_platformInput.keyStates[PLATFORM_KEY_LEFT_CTRL].isDown) {
+		// OutputDebugStringA((char *)"Ctrl Down");
+	}
+
+	if(global_platformInput.keyStates[PLATFORM_KEY_O].pressedCount > 0) {
+		OutputDebugStringA((char *)"O Pressed\n");
+	}
+
+	if(global_platformInput.keyStates[PLATFORM_KEY_O].isDown) {
+		OutputDebugStringA((char *)"O down\n");
+	}
+
+	if(global_platformInput.keyStates[PLATFORM_KEY_O].releasedCount > 0) {
+		OutputDebugStringA((char *)"O released\n");
+	}
 
 	//NOTE: Ctrl + O -> open file 
-	if(global_platformInput.keyStates[PLATFORM_KEY_LEFT_CTRL].isDown && global_platformInput.keyStates[PLATFORM_KEY_O].pressedCount > 0) {
-		// if(Platform_LoadEntireFile(char *filename_utf8, void **data, size_t *data_size)) {
+	if(global_platformInput.keyStates[PLATFORM_KEY_LEFT_CTRL].isDown && global_platformInput.keyStates[PLATFORM_KEY_O].pressedCount > 0) 
+	{
+		Platform_OpenFile_withDialog();
+		size_t data_size = 0;
+		void *data = 0;
+		char *filename_utf8 = "..\\src\\main.cpp";
+		if(Platform_LoadEntireFile(filename_utf8, &data, &data_size)) {
+			int i = 0;
 
-		// } else {
-		// 	assert(!"Couldn't open file");
-		// }
+			// addTextToBuffer(b, (char *)data, b->cursorAt_inBytes);
+
+			Win32FreeFileData(data);
+		} else {
+			assert(!"Couldn't open file");
+		}
 	}
 
 }
