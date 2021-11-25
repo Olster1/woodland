@@ -120,20 +120,24 @@ static void updateEditor() {
 
 	//NOTE: Ctrl + O -> open file 
 	if(global_platformInput.keyStates[PLATFORM_KEY_LEFT_CTRL].isDown && global_platformInput.keyStates[PLATFORM_KEY_O].pressedCount > 0) 
-	{
-		Platform_OpenFile_withDialog();
+	{	
+		//NOTE: Make sure free the string
+		char *fileNameToOpen = (char *)Platform_OpenFile_withDialog_wideChar_haveToFree();
+
 		size_t data_size = 0;
 		void *data = 0;
-		char *filename_utf8 = "..\\src\\main.cpp";
-		if(Platform_LoadEntireFile(filename_utf8, &data, &data_size)) {
+		if(Platform_LoadEntireFile_wideChar(fileNameToOpen, &data, &data_size)) {
 			int i = 0;
 
 			// addTextToBuffer(b, (char *)data, b->cursorAt_inBytes);
 
 			Win32FreeFileData(data);
+
 		} else {
 			assert(!"Couldn't open file");
 		}
+
+		Win32HeapFree(fileNameToOpen);
 	}
 
 }

@@ -324,39 +324,57 @@ static u8 *platform_realloc_memory(void *src, u32 bytesToMove, size_t sizeToAllo
 
 }
 
-static void Platform_OpenFile_withDialog() {
+static void *Platform_OpenFile_withDialog_wideChar_haveToFree() {
     OPENFILENAME config = {};
     config.lStructSize = sizeof(OPENFILENAME);
     config.hwndOwner = global_wndHandle; // Put the owner window handle here.
     config.lpstrFilter = L"\0\0"; // Put the file extension here.
-    wchar_t path[MAX_PATH];
+
+    wchar_t *path = (wchar_t *)Win32HeapAlloc(MAX_PATH*sizeof(wchar_t), true);
     path[0] = 0;
+    
     config.lpstrFile = path;
     config.lpstrDefExt = L"cpp" + 1;
-    config.nMaxFile = sizeof(path) / sizeof(path[0]);
+    config.nMaxFile = MAX_PATH;
     config.Flags = OFN_FILEMUSTEXIST;
     config.Flags |= OFN_NOCHANGEDIR;//To prevent GetOpenFileName() from changing the working directory
 
     if (GetOpenFileNameW(&config)) {
-        // `path` contains the file
-        OutputDebugStringW(path);
-    }
+        //NOTE: Success
+    } 
+
+    return path;
 }
 
 
-static bool Platform_LoadEntireFile(char *filename_utf8, void **data, size_t *data_size)
-{
-    int characterCount = MultiByteToWideChar(CP_UTF8, 0, filename_utf8, -1, 0, 0);
+// void *result = 0;
 
-    u32 sizeInBytes = characterCount*sizeof(u16);
+// OPENFILENAME config = {};
+// config.lStructSize = sizeof(OPENFILENAME);
+// config.hwndOwner = global_wndHandle; // Put the owner window handle here.
+// config.lpstrFilter = L"\0\0"; // Put the file extension here.
 
-    LPWSTR filename = (LPWSTR)Win32HeapAlloc(sizeInBytes, false);
+// wchar_t *path = (wchar_t *)Win32HeapAlloc(MAX_PATH*sizeof(wchar_t), true);
+// path[0] = 0;
 
-    int sizeCheck = MultiByteToWideChar(CP_UTF8, 0, filename_utf8, -1, filename, characterCount);
+// config.lpstrFile = path;
+// config.lpstrDefExt = L"cpp" + 1;
+// config.nMaxFile = sizeof(path) / sizeof(path[0]);
+// config.Flags = OFN_FILEMUSTEXIST;
+// config.Flags |= OFN_NOCHANGEDIR;//To prevent GetOpenFileName() from changing the working directory
 
-    assert(sizeCheck != 0);
+// if (GetOpenFileNameW(&config)) {
+//     // `path` contains the file
+// }
+// return path;
 
-    bool read_successful = 0;
+
+
+static bool Platform_LoadEntireFile_wideChar(void *filename_wideChar_, void **data, size_t *data_size) {
+
+    LPWSTR filename_wideChar = (LPWSTR)filename_wideChar_;
+
+     bool read_successful = 0;
     
     *data = 0;
     *data_size = 0;
@@ -375,7 +393,7 @@ static bool Platform_LoadEntireFile(char *filename_utf8, void **data, size_t *da
         DWORD flags_and_attributes = 0;
         HANDLE template_file = 0;
         
-        if((file = CreateFileW(filename, desired_access, share_mode, &security_attributes, creation_disposition, flags_and_attributes, template_file)) != INVALID_HANDLE_VALUE)
+        if((file = CreateFileW(filename_wideChar, desired_access, share_mode, &security_attributes, creation_disposition, flags_and_attributes, template_file)) != INVALID_HANDLE_VALUE)
         {
             DWORD read_bytes = GetFileSize(file, 0);
             if(read_bytes)
@@ -396,10 +414,32 @@ static bool Platform_LoadEntireFile(char *filename_utf8, void **data, size_t *da
             CloseHandle(file);
         }
     }
-
-    Win32HeapFree(filename);
     
     return read_successful;
+}
+
+static bool Platform_LoadEntireFile_utf8(char *filename_utf8, void **data, size_t *data_size) {
+    LPWSTR filename_wideChar;
+    {
+        //NOTE: turning utf8 to windows wide char
+        int characterCount = MultiByteToWideChar(CP_UTF8, 0, filename_utf8, -1, 0, 0);
+
+        u32 sizeInBytes = (characterCount + 1)*sizeof(u16); //NOTE: Plus one for null terminator
+
+        filename_wideChar = (LPWSTR)Win32HeapAlloc(sizeInBytes, false);
+
+        int sizeCheck = MultiByteToWideChar(CP_UTF8, 0, filename_utf8, -1, filename_wideChar, characterCount);
+
+        assert(sizeCheck != sizeInBytes);
+
+    }
+
+    bool result = Platform_LoadEntireFile_wideChar(filename_wideChar, data, data_size);
+
+    Win32HeapFree(filename_wideChar);
+
+    return result;
+
 }
 
 static void
