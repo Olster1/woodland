@@ -9,6 +9,9 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "../libs/stb_image.h"
 
+#define STB_TRUETYPE_IMPLEMENTATION 
+#include "../libs/stb_truetype.h"
+
 #define EASY_STRING_IMPLEMENTATION 1
 #include "easy_string_utf8.h"
 

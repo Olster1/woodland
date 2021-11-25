@@ -1,4 +1,5 @@
 #include "wl_buffer.cpp"
+#include "font.cpp"
 
 #define MAX_WINDOW_COUNT 16
 
@@ -23,6 +24,8 @@ typedef struct {
 
 	EditorMode mode;
 
+	Font font;
+
 } EditorState;
 
 
@@ -40,6 +43,8 @@ static void updateEditor() {
 
 		editorState->bufferAt = 0;
 		editorState->mode = MODE_EDIT_BUFFER;
+
+		editorState->font = initFont("..\\fonts\\SpaceMono.ttf");
 	}
 
 	WL_Window *w = &editorState->windows[editorState->bufferAt];
