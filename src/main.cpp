@@ -34,8 +34,6 @@ static void updateEditor() {
 	EditorState *editorState = (EditorState *)global_platform.permanent_storage;
 	assert(sizeof(EditorState) < global_platform.permanent_storage_size);
 	if(!editorState->initialized) {
-
-
 		
 		editorState->initialized = true;
 

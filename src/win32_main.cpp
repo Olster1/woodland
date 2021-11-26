@@ -31,6 +31,7 @@
 
 static PlatformLayer global_platform;
 static HWND global_wndHandle;
+static ID3D11Device1 *global_d3d11Device;
 
 #define DEFINES_BACKGROUND_COLOR 0.1f, 0.1f, 0.1f, 1 
 
@@ -421,6 +422,31 @@ static bool Platform_LoadEntireFile_wideChar(void *filename_wideChar_, void **da
     return read_successful;
 }
 
+static void *Platform_loadTextureToGPU(void *data, u32 texWidth, u32 texHeight, u32 bytesPerPixel) {
+    // Create Texture
+    D3D11_TEXTURE2D_DESC textureDesc = {};
+    textureDesc.Width              = texWidth;
+    textureDesc.Height             = texHeight;
+    textureDesc.MipLevels          = 1;
+    textureDesc.ArraySize          = 1;
+    textureDesc.Format             = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+    textureDesc.SampleDesc.Count   = 1;
+    textureDesc.Usage              = D3D11_USAGE_IMMUTABLE;
+    textureDesc.BindFlags          = D3D11_BIND_SHADER_RESOURCE;
+
+    D3D11_SUBRESOURCE_DATA textureSubresourceData = {};
+    textureSubresourceData.pSysMem = data;
+    textureSubresourceData.SysMemPitch = bytesPerPixel*texWidth;
+
+    ID3D11Texture2D* texture;
+    global_d3d11Device->CreateTexture2D(&textureDesc, &textureSubresourceData, &texture);
+
+    ID3D11ShaderResourceView* textureView;
+    global_d3d11Device->CreateShaderResourceView(texture, nullptr, &textureView);
+
+    return textureView;
+}
+
 static bool Platform_LoadEntireFile_utf8(char *filename_utf8, void **data, size_t *data_size) {
     LPWSTR filename_wideChar;
     {
@@ -503,6 +529,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int
 
     // Create D3D11 Device and Context
     ID3D11Device1* d3d11Device;
+
     ID3D11DeviceContext1* d3d11DeviceContext;
     {
         ID3D11Device* baseDevice;
@@ -549,6 +576,8 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int
             d3dDebug->Release();
         }
     #endif
+
+    global_d3d11Device = d3d11Device;
 
     // Create Swap Chain
     IDXGISwapChain1* d3d11SwapChain;
@@ -612,7 +641,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int
     ID3D11VertexShader* vertexShader;
     {
         ID3DBlob* shaderCompileErrorsBlob;
-        HRESULT hResult = D3DCompileFromFile(L"..\\src\\shader.hlsl", nullptr, nullptr, "vs_main", "vs_5_0", 0, 0, &vsBlob, &shaderCompileErrorsBlob);
+        HRESULT hResult = D3DCompileFromFile(L"..\\src\\sdf_font.hlsl", nullptr, nullptr, "vs_main", "vs_5_0", 0, 0, &vsBlob, &shaderCompileErrorsBlob);
         if(FAILED(hResult))
         {
             const char* errorString = NULL;
@@ -636,7 +665,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int
     {
         ID3DBlob* psBlob;
         ID3DBlob* shaderCompileErrorsBlob;
-        HRESULT hResult = D3DCompileFromFile(L"..\\src\\shader.hlsl", nullptr, nullptr, "ps_main", "ps_5_0", 0, 0, &psBlob, &shaderCompileErrorsBlob);
+        HRESULT hResult = D3DCompileFromFile(L"..\\src\\sdf_font.hlsl", nullptr, nullptr, "ps_main", "ps_5_0", 0, 0, &psBlob, &shaderCompileErrorsBlob);
         if(FAILED(hResult))
         {
             const char* errorString = NULL;
@@ -787,6 +816,27 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int
     /////////////////////
 
 
+    ID3D11BlendState *m_blendMode;
+    D3D11_BLEND_DESC blendDesc;
+    ZeroMemory(&blendDesc, sizeof(blendDesc));
+
+    D3D11_RENDER_TARGET_BLEND_DESC rtbd;
+    ZeroMemory(&rtbd, sizeof(rtbd));
+
+    rtbd.BlendEnable = true;
+    rtbd.SrcBlend = D3D11_BLEND_SRC_ALPHA;
+    rtbd.DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
+    rtbd.BlendOp = D3D11_BLEND_OP_ADD;
+
+    rtbd.SrcBlendAlpha = D3D11_BLEND_ONE;
+    rtbd.DestBlendAlpha = D3D11_BLEND_ZERO;
+    rtbd.BlendOpAlpha = D3D11_BLEND_OP_ADD;
+    
+    rtbd.RenderTargetWriteMask = 0x0f;
+    blendDesc.RenderTarget[0] = rtbd;
+
+    d3d11Device->CreateBlendState(&blendDesc, &m_blendMode);
+
     bool running = true;
     while(running) {
 
@@ -910,7 +960,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int
         d3d11DeviceContext->Map(constantBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedSubresource);
         Constants* constants = (Constants*)(mappedSubresource.pData);
         constants->pos = {0.25f, 0.3f};
-        constants->color = {1.0f, 0, 0, 1.f};
+        constants->color = {1, 1, 1, 1};
         d3d11DeviceContext->Unmap(constantBuffer, 0);
 
 
@@ -919,10 +969,21 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int
         d3d11DeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
         d3d11DeviceContext->IASetInputLayout(inputLayout);
 
+        float blendFactor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+        UINT sampleMask   = 0xffffffff;
+
+        d3d11DeviceContext->OMSetBlendState(m_blendMode, blendFactor, sampleMask);
+
         d3d11DeviceContext->VSSetShader(vertexShader, nullptr, 0);
         d3d11DeviceContext->PSSetShader(pixelShader, nullptr, 0);
 
-        d3d11DeviceContext->PSSetShaderResources(0, 1, &textureView);
+        EditorState *editorState = (EditorState *)global_platform.permanent_storage;
+        
+        GlyphInfo glyph = easyFont_getGlyph(&editorState->font, (u32)'A');
+
+        ID3D11ShaderResourceView* fontTextureView = (ID3D11ShaderResourceView *)glyph.handle;
+        d3d11DeviceContext->PSSetShaderResources(0, 1, &fontTextureView);
+        // d3d11DeviceContext->PSSetShaderResources(0, 1, &textureView);
         d3d11DeviceContext->PSSetSamplers(0, 1, &samplerState);
 
         d3d11DeviceContext->VSSetConstantBuffers(0, 1, &constantBuffer);

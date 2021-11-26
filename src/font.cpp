@@ -1,13 +1,19 @@
 
 typedef struct {
-    u32 textureHandle;
+    void *handle;
+
     float4 uvCoords;
     u32 unicodePoint;
 
     int xoffset;
     int yoffset;
 
+    int width;
+    int height;
+
     bool hasTexture;
+
+    u8 *sdfBitmap;
 
 } GlyphInfo;
 
@@ -15,7 +21,7 @@ typedef struct {
 
 typedef struct FontSheet FontSheet;
 typedef struct FontSheet {
-    // GLuint handle;
+    void *handle; //NOTE: Platform agnostic
 
     u32 glyphCount;
     GlyphInfo glyphs[MY_MAX_GLYPH_COUNT];
@@ -53,7 +59,7 @@ FontSheet *createFontSheet(Font *font, u32 firstChar, u32 endChar) {
     stbtt_InitFont(fontInfo, (const unsigned char *)contents, 0);
     
     //NOTE(ollie): Get the 'scale' for the max pixel height 
-    float maxHeightForFontInPixels = 32;//pixels
+    float maxHeightForFontInPixels = 8;//pixels
     float scale = stbtt_ScaleForPixelHeight(fontInfo, maxHeightForFontInPixels);
     
     //NOTE(ollie): Scale the padding around the glyph proportional to the size of the glyph
@@ -74,72 +80,108 @@ FontSheet *createFontSheet(Font *font, u32 firstChar, u32 endChar) {
     
     // //NOTE(ollie): Fill out the table
     // stbtt_GetKerningTable(fontInfo, kerningTable, kerningTableLength);
-    
-    for(s32 codeIndex = firstChar; codeIndex <= endChar; ++codeIndex) {
+
+    u32 maxWidth = 0;
+    u32 maxHeight = 0;
+    u32 totalWidth = 0;
+    u32 totalHeight = 0;
+
+    u32 counAt = 0;
+   
+    for(s32 codeIndex = firstChar; codeIndex < endChar; ++codeIndex) {
         
         int width;
         int height;
         int xoffset; 
         int yoffset;
         
-        u8 *sdfBitmap = stbtt_GetCodepointSDF(fontInfo, scale, codeIndex, padding, onedge_value, pixel_dist_scale, &width, &height, &xoffset, &yoffset);    
+        u8 *data = stbtt_GetCodepointSDF(fontInfo, scale, codeIndex, padding, onedge_value, pixel_dist_scale, &width, &height, &xoffset, &yoffset);    
         
         if(width > 0 && height > 0) {
                 
             assert(sheet->glyphCount < MY_MAX_GLYPH_COUNT);
             GlyphInfo *info = &sheet->glyphs[sheet->glyphCount++];
 
-            // info->textureHandle;
-            // info->uvCoords;
             info->unicodePoint = codeIndex;
+
+            info->sdfBitmap = data;
 
             info->xoffset = xoffset;
             info->yoffset = yoffset;
-            info->hasTexture = sdfBitmap;
+            info->hasTexture = data;
 
-            // elm.tex = {};
-            // elm.tex.width = width;
-            // elm.tex.height = height;
-            // elm.tex.aspectRatio_h_over_w = height / width;
-            // elm.tex.uvCoords = rect2f(0, 0, 1, 1);
-            
-            
-            if(sdfBitmap) {
+            info->width = width;
+            info->height = height;
+            // info->aspectRatio_h_over_w = height / width;
 
-                //NOTE(ollie): Blow out bitmap to 32bits per pixel instead of 8 so it's easier to load to the GPU
-                u32 *sdfBitmap_32 = (u32 *)Win32HeapAlloc(width*height*sizeof(u32), true);
+            if(info->sdfBitmap) {
+                totalWidth += width;
+                counAt++;
 
-                for(int y = 0; y < height; ++y) {
-                    for(int x = 0; x < width; ++x) {
-                        u8 alpha = sdfBitmap[y*width + x];
-                        if(alpha != 0) {
-                            int j = 0;
-                        }
-                        sdfBitmap_32[y*width + x] = 0x00000000 | (u32)(((u32)alpha) << 24);
-                    }
+                if(height > maxHeight) {
+                    maxHeight = height;
                 }
-                ////////////////////////////////////////////////////////////////////
-                
-                //NOTE(ollie): Load the texture to the GPU
-                // elm.tex.id = renderLoadTexture(width, height, sdfBitmap_32, RENDER_TEXTURE_DEFAULT);
-                
-                //NOTE(ollie): Release memory from 32bit bitmap
-                Win32HeapFree(sdfBitmap_32);
             } 
-            
+
+            if((counAt % 16) == 0) {
+                counAt = 0;
+                if(totalWidth > maxWidth) { maxWidth = totalWidth; }
+                totalWidth = 0;
+            }
         }
-        
-        //NOTE(ollie): Free the bitmap data
-        stbtt_FreeSDF(sdfBitmap, 0);
     }
-    
 
+        
+    totalWidth = maxWidth;
+    totalHeight = maxHeight*16;
+    u32 *sdfBitmap_32 = (u32 *)Win32HeapAlloc(totalWidth*totalHeight*sizeof(u32), true);
+
+    u32 xAt = 0;
+    u32 yAt = 0;
+
+    for(int i = 0; i < sheet->glyphCount; ++i) {
+        GlyphInfo *info = &sheet->glyphs[i];
+
+        if(info->sdfBitmap) {
+
+            //NOTE: Calculate uv coords
+            info->uvCoords = make_float4(xAt / totalWidth, yAt / totalHeight, (xAt + info->width) / totalWidth, (yAt + info->height) / totalHeight);
+
+            //NOTE(ollie): Blow out bitmap to 32bits per pixel instead of 8 so it's easier to load to the GPU
+            for(int y = 0; y < info->height; ++y) {
+                for(int x = 0; x < info->width; ++x) {
+
+                    u8 alpha = info->sdfBitmap[y*info->width + x];
+                    // sdfBitmap_32[(y + yAt)*totalWidth + (x + xAt)] = 0x00000000 | (u32)(((u32)alpha) << 24);
+                    sdfBitmap_32[(y + yAt)*totalWidth + (x + xAt)] = 0x00FFFFFF | (u32)(((u32)alpha) << 24);
+                }
+            }
+
+            xAt += info->width;
+
+            if((i % 16) == 0 && i != 0) {
+                yAt += maxHeight;
+                xAt = 0;
+            }
+
+            //NOTE(ollie): Free the bitmap data
+            stbtt_FreeSDF(info->sdfBitmap, 0);
+        }
+    }
+
+    //NOTE Test purposes
+    // for(int y = 0; y < totalHeight; ++y) {
+    //     for(int x = 0; x < totalWidth; ++x) {
+    //         sdfBitmap_32[y*totalWidth + x] = 0xFFF0FFF0;// | (u32)(((u32)alpha) << 24);
+    //     }
+    // }
     
+    //NOTE(ollie): Load the texture to the GPU
+    sheet->handle = Platform_loadTextureToGPU(sdfBitmap_32, totalWidth, totalHeight, 4);
+
+    //NOTE(ollie): Release memory from 32bit bitmap
+    Win32HeapFree(sdfBitmap_32);
     Win32HeapFree(contents);
-
-
-    // sheet->handle = renderLoadTexture(FONT_SIZE, FONT_SIZE, bitmapTexture);
-    // assert(sheet->handle);
 
     return sheet;
 }
@@ -196,7 +238,8 @@ static inline GlyphInfo easyFont_getGlyph(Font *font, u32 unicodePoint) {
 
         glyph = sheet->glyphs[indexInArray];
 
+        glyph.handle = sheet->handle;
+
     }
     return glyph;
-
 }
