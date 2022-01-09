@@ -6,8 +6,7 @@ enum RenderCommandType {
 
 typedef struct {
 	RenderCommandType type;
-
-	float16 orthoMatrix;
+	float16 matrix; //NOTE: For the Render_Matrix type
 
 	int offset;
 	int size;
@@ -28,6 +27,7 @@ typedef struct {
 	int glyphCount;
 	float glyphInstanceData[MAX_GLYPH_COUNT*SIZE_OF_GLYPH_INSTANCE]; //NOTE: This would be x, y, r, g, b, a, u, v, s, t
 
+
 } Renderer;
 
 static void initRenderer(Renderer *r) {
@@ -42,10 +42,12 @@ static RenderCommand *getRenderCommand(Renderer *r, RenderCommandType type) {
 	if(r->currentType != type) {
 		if(r->commandCount < MAX_RENDER_COMMAND_COUNT) {
 			command = &r->commands[r->commandCount++];
-
-			if(r->glyphCount < SIZE_OF_GLYPH_INSTANCE)
-			command->offset = r->glyphCount*SIZE_OF_GLYPH_INSTANCE;
-			command->size = 0;
+				
+			//TODO: Block from adding any more glpyhs
+			if(r->glyphCount < SIZE_OF_GLYPH_INSTANCE) {
+				command->offset = r->glyphCount*SIZE_OF_GLYPH_INSTANCE;
+				command->size = 0;
+			}
 		} else {
 			assert(!"Command buffer full");
 		}
@@ -60,27 +62,37 @@ static RenderCommand *getRenderCommand(Renderer *r, RenderCommandType type) {
 	return command;
 }
 
-static void pushGlyph(Renderer *r, float2 pos, float4 color, float4 uv) {
-	RenderCommand *c = getRenderCommand(r, RENDER_GLYPH);
+static void pushMatrix(Renderer *r, float16 m) {
+	RenderCommand *c = getRenderCommand(r, RENDER_MATRIX);
+
+	assert(c->type == RENDER_MATRIX);
+	c->matrix = m;
 }
 
-static void drawRenderBuffer(Renderer *r) {
 
-	for(int i = 0; i < r->commandCount; ++i) {
-		RenderCommand *c = r->commands + i;
+static void pushGlyph(Renderer *r, void *textureHandle, float2 pos, float4 color, float4 uv) {
+	RenderCommand *c = getRenderCommand(r, RENDER_GLYPH);
 
-		switch(c->type) {
-			case RENDER_NULL: {
-				assert(false);
-			} break;
-			case RENDER_GLYPH: {
-				
+	assert(c->type == RENDER_GLYPH);
 
-				
-			} break;
-			case RENDER_MATRIX: {
+	if(r->glyphCount < MAX_GLYPH_COUNT) {
+		float *data = r->glyphInstanceData + r->glyphCount*SIZE_OF_GLYPH_INSTANCE;
 
-			} break;
-		}
+		data[0] = pos.x;
+		data[1] = pos.y;
+		
+		data[2] = color.x;
+		data[3] = color.y;
+		data[4] = color.z;
+		data[5] = color.w;
+
+		data[6] = uv.x;
+		data[7] = uv.y;
+		data[8] = uv.z;
+		data[9] = uv.w;
+
+		r->glyphCount++;
+		c->size += SIZE_OF_GLYPH_INSTANCE;
 	}
 }
+

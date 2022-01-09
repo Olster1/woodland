@@ -482,6 +482,8 @@ Win32FreeFileData(void *data)
 #include "render.c"
 #include "main.cpp"
 
+#include "d3d_render.cpp"
+
 
 int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int cmdshow)
 {
@@ -530,7 +532,6 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int
     // Create D3D11 Device and Context
     ID3D11Device1* d3d11Device;
 
-    ID3D11DeviceContext1* d3d11DeviceContext;
     {
         ID3D11Device* baseDevice;
         ID3D11DeviceContext* baseDeviceContext;
@@ -685,7 +686,6 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int
     }
 
     // Create Vertex Buffer
-    ID3D11Buffer* vertexBuffer;
     UINT numVerts;
     UINT stride;
     UINT offset;
@@ -709,7 +709,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int
 
         D3D11_SUBRESOURCE_DATA vertexSubresourceData = { vertexData };
 
-        HRESULT hResult = d3d11Device->CreateBuffer(&vertexBufferDesc, &vertexSubresourceData, &vertexBuffer);
+        HRESULT hResult = d3d11Device->CreateBuffer(&vertexBufferDesc, &vertexSubresourceData, &global_vertexBuffer_quad);
         assert(SUCCEEDED(hResult));
     }
 
@@ -901,7 +901,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int
             textBuffer[cursorAt + i] = tempBuffer[i]; 
         }
 
-        updateEditor();
+        EditorState *editorState = updateEditor();
 
 
         // //NOTE: Process our command buffer
@@ -955,6 +955,8 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int
         d3d11DeviceContext->RSSetViewports(1, &viewport);
 
 
+        
+
         //NOTE: Update the constant buffer
         D3D11_MAPPED_SUBRESOURCE mappedSubresource;
         d3d11DeviceContext->Map(constantBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedSubresource);
@@ -977,18 +979,20 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int
         d3d11DeviceContext->VSSetShader(vertexShader, nullptr, 0);
         d3d11DeviceContext->PSSetShader(pixelShader, nullptr, 0);
 
-        EditorState *editorState = (EditorState *)global_platform.permanent_storage;
+        // EditorState *editorState = (EditorState *)global_platform.permanent_storage;
         
-        GlyphInfo glyph = easyFont_getGlyph(&editorState->font, (u32)'A');
+        // GlyphInfo glyph = easyFont_getGlyph(&editorState->font, (u32)'A');
 
-        ID3D11ShaderResourceView* fontTextureView = (ID3D11ShaderResourceView *)glyph.handle;
-        d3d11DeviceContext->PSSetShaderResources(0, 1, &fontTextureView);
-        // d3d11DeviceContext->PSSetShaderResources(0, 1, &textureView);
+        // ID3D11ShaderResourceView* fontTextureView = (ID3D11ShaderResourceView *)glyph.handle;
+        // d3d11DeviceContext->PSSetShaderResources(0, 1, &fontTextureView);
+        d3d11DeviceContext->PSSetShaderResources(0, 1, &textureView);
         d3d11DeviceContext->PSSetSamplers(0, 1, &samplerState);
+
+        backendRender_processCommandBuffer(&editorState->renderer);
 
         d3d11DeviceContext->VSSetConstantBuffers(0, 1, &constantBuffer);
 
-        d3d11DeviceContext->IASetVertexBuffers(0, 1, &vertexBuffer, &stride, &offset);
+        d3d11DeviceContext->IASetVertexBuffers(0, 1, &global_vertexBuffer_quad, &stride, &offset);
 
         d3d11DeviceContext->Draw(numVerts, 0);
 

@@ -30,7 +30,7 @@ typedef struct {
 
 
 
-static void updateEditor() {
+static EditorState *updateEditor() {
 	EditorState *editorState = (EditorState *)global_platform.permanent_storage;
 	assert(sizeof(EditorState) < global_platform.permanent_storage_size);
 	if(!editorState->initialized) {
@@ -97,10 +97,38 @@ static void updateEditor() {
 		} break;
 	}
 
-	
 	u8 *str = compileBuffer_toNullTerminateString(b);
-	OutputDebugStringA((char *)str);
-	OutputDebugStringA((char *)"\n");
+
+	u32 xAt = 0;
+	u32 yAt = 0;
+
+	u8 *at = str;
+
+	//NOTE: Output the buffer
+	for(int i = 0; i < easyString_getSizeInBytes_utf8((char *)str); ++i) {
+		u32 rune = easyUnicode_utf8_codepoint_To_Utf32_codepoint(&((char *)at), true);
+
+		if(rune == '\n') {
+			yAt += editorState->font.fontHeight;
+			xAt = 0;
+		} else {
+			GlyphInfo g = easyFont_getGlyph(&editorState->font, rune);
+
+			if(g.hasTexture) {
+
+				float4 color = make_float4(1, 1, 1, 1);
+
+				float2 pos = {};
+				pos.x = xAt + g.xoffset;
+				pos.y = yAt + g.yoffset;
+				pushGlyph(&editorState->renderer, g.handle, pos, color, g.uvCoords);
+			}
+
+			xAt += g.width;
+
+		}
+	}
+
 	Win32HeapFree(str);
 
 	//////////////////////////////////////////////////////// 
@@ -142,5 +170,7 @@ static void updateEditor() {
 
 		Win32HeapFree(fileNameToOpen);
 	}
+
+	return editorState;
 
 }
