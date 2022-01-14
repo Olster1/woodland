@@ -5,8 +5,15 @@ cbuffer constants : register(b0)
 };
 
 struct VS_Input {
-    float2 pos : POS;
+    float3 pos : POS;
     float2 uv : TEX;
+};
+
+struct VS_Input_Instance {
+    float2 pos : POS;
+    float4 color : COLOR;
+    float4 uv : TEXCOORD;
+
 };
 
 struct VS_Output {
@@ -19,7 +26,7 @@ Texture2D    mytexture : register(t0);
 SamplerState mysampler : register(s0);
 
 
-VS_Output vs_main(VS_Input input)
+VS_Output vs_main(VS_Input input, VS_Input_Instance instance_input)
 {
     VS_Output output;
     output.pos = float4(input.pos + offset, 0.0f, 1.0f);
