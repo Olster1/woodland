@@ -49,6 +49,8 @@ static EditorState *updateEditor() {
 
 	WL_Buffer *b = &w->buffer;
 
+	Renderer *renderer = &editorState->renderer;
+
 	switch(editorState->mode) {
 		case MODE_EDIT_BUFFER: {
 			//NOTE: Any text added
@@ -121,7 +123,7 @@ static EditorState *updateEditor() {
 				float2 pos = {};
 				pos.x = xAt + g.xoffset;
 				pos.y = yAt + g.yoffset;
-				pushGlyph(&editorState->renderer, g.handle, pos, color, g.uvCoords);
+				pushGlyph(renderer, g.handle, pos, color, g.uvCoords);
 			}
 
 			xAt += g.width;
@@ -170,6 +172,18 @@ static EditorState *updateEditor() {
 
 		Win32HeapFree(fileNameToOpen);
 	}
+
+
+	pushViewport(renderer, make_float4(0, 0, 0, 0));
+	pushClearColor(renderer, make_float4(1, 0.5f, 0, 1)); 
+	pushShader(renderer, &sdfFontShader);
+	pushGlyph(renderer, NULL, make_float2(0, 0), make_float4(1, 1, 1, 1), make_float4(0, 1, 0, 1));
+
+
+
+
+
+
 
 	return editorState;
 

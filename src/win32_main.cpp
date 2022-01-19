@@ -33,9 +33,6 @@ static PlatformLayer global_platform;
 static HWND global_wndHandle;
 static ID3D11Device1 *global_d3d11Device;
 
-#define DEFINES_BACKGROUND_COLOR 0.1f, 0.1f, 0.1f, 1 
-
-
 enum PlatformKeyType {
     PLATFORM_KEY_NULL,
     PLATFORM_KEY_UP,
@@ -480,9 +477,11 @@ Win32FreeFileData(void *data)
 
 #include "3DMaths.h"
 #include "render.c"
-#include "main.cpp"
+
 
 #include "d3d_render.cpp"
+
+#include "main.cpp"
 
 
 int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int cmdshow)
@@ -532,64 +531,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int
 
     //TODO: Change to using memory arena? 
     BackendRenderer *backendRenderer = (BackendRenderer *)Win32HeapAlloc(sizeof(BackendRenderer), true); 
-    backendRender_init(backendRenderer);
-
-   
-
-    // Load Image
-    int texWidth;
-    int texHeight;
-    unsigned char *testTextureBytes = (unsigned char *)stbi_load("..\\src\\testTexture.png", &texWidth, &texHeight, 0, STBI_rgb_alpha);
-    int texBytesPerRow = 4 * texWidth;
-
-    assert(testTextureBytes);
-
-    // Create Texture
-    D3D11_TEXTURE2D_DESC textureDesc = {};
-    textureDesc.Width              = texWidth;
-    textureDesc.Height             = texHeight;
-    textureDesc.MipLevels          = 1;
-    textureDesc.ArraySize          = 1;
-    textureDesc.Format             = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
-    textureDesc.SampleDesc.Count   = 1;
-    textureDesc.Usage              = D3D11_USAGE_IMMUTABLE;
-    textureDesc.BindFlags          = D3D11_BIND_SHADER_RESOURCE;
-
-    D3D11_SUBRESOURCE_DATA textureSubresourceData = {};
-    textureSubresourceData.pSysMem = testTextureBytes;
-    textureSubresourceData.SysMemPitch = texBytesPerRow;
-
-    ID3D11Texture2D* texture;
-    d3d11Device->CreateTexture2D(&textureDesc, &textureSubresourceData, &texture);
-
-    ID3D11ShaderResourceView* textureView;
-    d3d11Device->CreateShaderResourceView(texture, nullptr, &textureView);
-
-    free(testTextureBytes);
-
-    //NOTE: Create the constant buffer
-
-    struct Constants
-    {
-        float2 pos;
-        float2 paddingUnused; // color (below) needs to be 16-byte aligned! 
-        float4 color;
-    };
-
-    
-    ID3D11Buffer* constantBuffer;
-    {
-        D3D11_BUFFER_DESC constantBufferDesc = {};
-
-        // ByteWidth must be a multiple of 16, per the docs
-        constantBufferDesc.ByteWidth      = sizeof(Constants) + 0xf & 0xfffffff0;
-        constantBufferDesc.Usage          = D3D11_USAGE_DYNAMIC;
-        constantBufferDesc.BindFlags      = D3D11_BIND_CONSTANT_BUFFER;
-        constantBufferDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-
-        HRESULT hResult = d3d11Device->CreateBuffer(&constantBufferDesc, nullptr, &constantBuffer);
-        assert(SUCCEEDED(hResult));
-    }
+    backendRender_init(backendRenderer, hwnd);
 
     //NOTE: Create a input buffer to store text input across frames.
     #define MAX_INPUT_BUFFER_SIZE 128
@@ -609,26 +551,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int
     /////////////////////
 
 
-    ID3D11BlendState *m_blendMode;
-    D3D11_BLEND_DESC blendDesc;
-    ZeroMemory(&blendDesc, sizeof(blendDesc));
-
-    D3D11_RENDER_TARGET_BLEND_DESC rtbd;
-    ZeroMemory(&rtbd, sizeof(rtbd));
-
-    rtbd.BlendEnable = true;
-    rtbd.SrcBlend = D3D11_BLEND_SRC_ALPHA;
-    rtbd.DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
-    rtbd.BlendOp = D3D11_BLEND_OP_ADD;
-
-    rtbd.SrcBlendAlpha = D3D11_BLEND_ONE;
-    rtbd.DestBlendAlpha = D3D11_BLEND_ZERO;
-    rtbd.BlendOpAlpha = D3D11_BLEND_OP_ADD;
     
-    rtbd.RenderTargetWriteMask = 0x0f;
-    blendDesc.RenderTarget[0] = rtbd;
-
-    d3d11Device->CreateBlendState(&blendDesc, &m_blendMode);
 
     bool running = true;
     while(running) {
@@ -739,55 +662,12 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int
 
 
 
-        FLOAT backgroundColor[4] = { DEFINES_BACKGROUND_COLOR };
-        d3d11DeviceContext->ClearRenderTargetView(default_d3d11FrameBufferView, backgroundColor);
-
-        RECT winRect;
-        GetClientRect(hwnd, &winRect);
-        D3D11_VIEWPORT viewport = { 0.0f, 0.0f, (FLOAT)(winRect.right - winRect.left), (FLOAT)(winRect.bottom - winRect.top), 0.0f, 1.0f };
-        d3d11DeviceContext->RSSetViewports(1, &viewport);
+        // FLOAT backgroundColor[4] = { DEFINES_BACKGROUND_COLOR };
+        // d3d11DeviceContext->ClearRenderTargetView(default_d3d11FrameBufferView, backgroundColor);
 
 
         
-
-        //NOTE: Update the constant buffer
-        D3D11_MAPPED_SUBRESOURCE mappedSubresource;
-        d3d11DeviceContext->Map(constantBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedSubresource);
-        Constants* constants = (Constants*)(mappedSubresource.pData);
-        constants->pos = {0.25f, 0.3f};
-        constants->color = {1, 1, 1, 1};
-        d3d11DeviceContext->Unmap(constantBuffer, 0);
-
-
-        d3d11DeviceContext->OMSetRenderTargets(1, &default_d3d11FrameBufferView, nullptr);
-
-        d3d11DeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-        d3d11DeviceContext->IASetInputLayout(inputLayout);
-
-        float blendFactor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-        UINT sampleMask   = 0xffffffff;
-
-        d3d11DeviceContext->OMSetBlendState(m_blendMode, blendFactor, sampleMask);
-
-        d3d11DeviceContext->VSSetShader(vertexShader, nullptr, 0);
-        d3d11DeviceContext->PSSetShader(pixelShader, nullptr, 0);
-
-        // EditorState *editorState = (EditorState *)global_platform.permanent_storage;
-        
-        // GlyphInfo glyph = easyFont_getGlyph(&editorState->font, (u32)'A');
-
-        // ID3D11ShaderResourceView* fontTextureView = (ID3D11ShaderResourceView *)glyph.handle;
-        // d3d11DeviceContext->PSSetShaderResources(0, 1, &fontTextureView);
-        d3d11DeviceContext->PSSetShaderResources(0, 1, &textureView);
-        d3d11DeviceContext->PSSetSamplers(0, 1, &samplerState);
-
         backendRender_processCommandBuffer(&editorState->renderer, backendRenderer);
-
-        d3d11DeviceContext->VSSetConstantBuffers(0, 1, &constantBuffer);
-
-        d3d11DeviceContext->IASetVertexBuffers(0, 1, &global_vertexBuffer_quad, &stride, &offset);
-
-        d3d11DeviceContext->Draw(numVerts, 0);
 
         backendRender_presentFrame(backendRenderer);
         

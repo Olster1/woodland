@@ -10,6 +10,21 @@ typedef struct {
 } d3d_shader_program;
 
 
+d3d_shader_program sdfFontShader;
+
+
+//NOTE: Example of 16byte aligned struct 
+// typedef struct {
+//     float2 pos;
+//     float2 paddingUnused; // color (below) needs to be 16-byte aligned! 
+//     float4 color;
+// } d3d_Constants;
+
+typedef struct {
+    float16 orthoMatrix;
+} d3d_Constants;
+
+
 typedef struct {
 	ID3D11Device1* d3d11Device;
 	ID3D11DeviceContext1* d3d11DeviceContext;
@@ -17,18 +32,66 @@ typedef struct {
 
 	ID3D11RenderTargetView* default_d3d11FrameBufferView;
 
-	ID3D11InputLayout* default_immutable_model_layout; //NOTE: vertex layout for all immutable mesh data like vertex position in model space, texture coordinates, normals?
+	// ID3D11InputLayout* default_immutable_model_layout; //NOTE: vertex layout for all immutable mesh data like vertex position in model space, texture coordinates, normals?
 
-	D3D11Buffer* instancing_vertex_buffer;
-	D3D11InputLayout* glyph_inputLayout;
+	ID3D11Buffer* instancing_vertex_buffer;
+	ID3D11InputLayout* glyph_inputLayout;
 
 	ID3D11SamplerState* samplerState_linearTexture;
 
-	d3d_shader_program sdfFontShader;
+	ID3D11BlendState *m_blendMode;
+
+	ID3D11Buffer* constantBuffer; //NOTE: Used across all shaders to set the different 'uniform' matrices like MVP matrix and orthographic matrix
+
+	HWND window_hwnd;
+
+	d3d_Constants constants;
+
+	UINT quad_stride;
+	UINT quad_numVerts;
+
+	ID3D11ShaderResourceView* testTexture;
 
 } BackendRenderer;
 
-static void d3d_createShaderProgram_vs_ps(char *vs_src, char *ps_src, d3d_shader_program *programToFillOut) {
+
+
+static ID3D11ShaderResourceView* d3d_loadFromFileToGPU(ID3D11Device1 *d3d11Device, char *image_to_load_utf8) {
+	// Load Image
+	int texWidth;
+	int texHeight;
+	unsigned char *testTextureBytes = (unsigned char *)stbi_load(image_to_load_utf8, &texWidth, &texHeight, 0, STBI_rgb_alpha);
+	int texBytesPerRow = 4 * texWidth;
+
+	assert(testTextureBytes);
+
+	// Create Texture
+	D3D11_TEXTURE2D_DESC textureDesc = {};
+	textureDesc.Width              = texWidth;
+	textureDesc.Height             = texHeight;
+	textureDesc.MipLevels          = 1;
+	textureDesc.ArraySize          = 1;
+	textureDesc.Format             = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+	textureDesc.SampleDesc.Count   = 1;
+	textureDesc.Usage              = D3D11_USAGE_IMMUTABLE;
+	textureDesc.BindFlags          = D3D11_BIND_SHADER_RESOURCE;
+
+	D3D11_SUBRESOURCE_DATA textureSubresourceData = {};
+	textureSubresourceData.pSysMem = testTextureBytes;
+	textureSubresourceData.SysMemPitch = texBytesPerRow;
+
+	ID3D11Texture2D* texture;
+	d3d11Device->CreateTexture2D(&textureDesc, &textureSubresourceData, &texture);
+
+	ID3D11ShaderResourceView* textureView;
+	d3d11Device->CreateShaderResourceView(texture, nullptr, &textureView);
+
+	free(testTextureBytes);
+
+	return textureView;
+}
+
+static void d3d_createShaderProgram_vs_ps(ID3D11Device1 *d3d11Device, LPCWSTR vs_src, LPCWSTR ps_src, d3d_shader_program *programToFillOut) {
 	// Create Vertex Shader
 	ID3DBlob* vsBlob;
 	ID3D11VertexShader* vertexShader;
@@ -45,7 +108,6 @@ static void d3d_createShaderProgram_vs_ps(char *vs_src, char *ps_src, d3d_shader
 	            shaderCompileErrorsBlob->Release();
 	        }
 	        MessageBoxA(0, errorString, "Shader Compiler Error", MB_ICONERROR | MB_OK);
-	        return 1;
 	    }
 
 	    hResult = d3d11Device->CreateVertexShader(vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), nullptr, &vertexShader);
@@ -69,7 +131,6 @@ static void d3d_createShaderProgram_vs_ps(char *vs_src, char *ps_src, d3d_shader
 	            shaderCompileErrorsBlob->Release();
 	        }
 	        MessageBoxA(0, errorString, "Shader Compiler Error", MB_ICONERROR | MB_OK);
-	        return 1;
 	    }
 
 	    hResult = d3d11Device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, &pixelShader);
@@ -83,8 +144,10 @@ static void d3d_createShaderProgram_vs_ps(char *vs_src, char *ps_src, d3d_shader
 
 }
 
-static void backendRender_init(BackendRenderer *r) {
+static UINT backendRender_init(BackendRenderer *r, HWND hwnd) {
 
+#define DEBUG_BUILD 1
+	r->window_hwnd = hwnd;
 	// Create D3D11 Device and Context
 	{
 	    ID3D11Device* baseDevice;
@@ -200,18 +263,15 @@ static void backendRender_init(BackendRenderer *r) {
 
 	{ //NOTE: Create all shader programs
 
-	d3d_createShaderProgram_vs_ps(L"..\\src\\sdf_font.hlsl", L"..\\src\\sdf_font.hlsl", &r->sdfFontShader);
+	d3d_createShaderProgram_vs_ps(d3d11Device, L"..\\src\\sdf_font.hlsl", L"..\\src\\sdf_font.hlsl", &sdfFontShader);
 	
 	}
 		
 	//NOTE: Create default vertex buffer shapes like Quad, Cube, Sphere
 	{
 		// Create Vertex Buffer
-		UINT numVerts;
-		UINT stride;
-		UINT offset;
 		{
-		    float vertexData[] = { // x, y, u, v
+		    float vertexData[] = { // x, y, z, u, v
 		        -0.5f,  0.5f, 0.f, 0.f, 0.f,
 		        0.5f, -0.5f, 0.f, 1.f, 1.f,
 		        -0.5f, -0.5f, 0.f, 0.f, 1.f,
@@ -219,9 +279,8 @@ static void backendRender_init(BackendRenderer *r) {
 		        0.5f,  0.5f, 0.f, 1.f, 0.f,
 		        0.5f, -0.5f, 0.f, 1.f, 1.f
 		    };
-		    stride = 4 * sizeof(float);
-		    numVerts = sizeof(vertexData) / stride;
-		    offset = 0;
+		    r->quad_stride = 5 * sizeof(float);
+		    r->quad_numVerts = sizeof(vertexData) / r->quad_stride;
 
 		    D3D11_BUFFER_DESC vertexBufferDesc = {};
 		    vertexBufferDesc.ByteWidth = sizeof(vertexData);
@@ -233,25 +292,34 @@ static void backendRender_init(BackendRenderer *r) {
 		    HRESULT hResult = d3d11Device->CreateBuffer(&vertexBufferDesc, &vertexSubresourceData, &global_vertexBuffer_quad);
 		    assert(SUCCEEDED(hResult));
 		}
-
-
-		// Create Input Layout
-		
-		{
-			// x, y, z, u, v
-		    D3D11_INPUT_ELEMENT_DESC inputElementDesc[] =
-		    {
-		        { "POS", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-		        { "TEX", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 }
-		    };
-
-		    HRESULT hResult = d3d11Device->CreateInputLayout(inputElementDesc, ARRAYSIZE(inputElementDesc), r->sdfFontShader.vsBlob->GetBufferPointer(), r->sdfFontShader.vsBlob->GetBufferSize(), &r->default_immutable_model_layout);
-		    assert(SUCCEEDED(hResult));
-		    // vsBlob->Release();
-		}
 	}
 
+	// Create Input Layout
 
+
+	{ //NOTE: Create the input layout for the Glyph elements
+	    D3D11_INPUT_ELEMENT_DESC inputElementDesc[] =
+	    {
+	    	{ "POS", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+	    	{ "TEX", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+	        { "POS_INSTANCE", 0, DXGI_FORMAT_R32G32_FLOAT, 1, 0, D3D11_INPUT_PER_INSTANCE_DATA, 0 },
+	        { "COLOR_INSTANCE", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 1 }, //NOTE: 1 at the end to say advance every instance, the reason this could be more than 1 is that the instance data might be for every 4 instances like each side of a face if each side represents the an instance, than if we wanted it to be the same color for all faces.  
+	        { "TEXCOORD_INSTANCE", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 1 }
+	    };
+
+	    HRESULT hResult = d3d11Device->CreateInputLayout(inputElementDesc, ARRAYSIZE(inputElementDesc), sdfFontShader.vsBlob->GetBufferPointer(), sdfFontShader.vsBlob->GetBufferSize(), &r->glyph_inputLayout);
+	    assert(SUCCEEDED(hResult));
+	    
+
+	    /*
+		https://docs.microsoft.com/en-us/windows/win32/api/d3d11/nf-d3d11-id3d11device-createinputlayout
+	    Once an input-layout object is created from a shader signature, the input-layout object can be reused with any other shader that has an identical input signature (semantics included). This can simplify the creation of input-layout objects when you are working with many shaders with identical inputs.
+
+	    If a data type in the input-layout declaration does not match the data type in a shader-input signature, CreateInputLayout will generate a warning during compilation. The warning is simply to call attention to the fact that the data may be reinterpreted when read from a register. You may either disregard this warning (if reinterpretation is intentional) or make the data types match in both declarations to eliminate the warning.
+
+	    */
+	}
+	
 	{ //NOTE: create the instancing_vertex_buffer
 	    D3D11_BUFFER_DESC vertexBufferDesc = {};
 	    vertexBufferDesc.ByteWidth = 0;
@@ -264,28 +332,7 @@ static void backendRender_init(BackendRenderer *r) {
 
 	//TODO: Look up whether the semantics names have to be a certain thing or can be anything
 
-	{ //NOTE: Create the input layout for the Glyph elements
-	    D3D11_INPUT_ELEMENT_DESC inputElementDesc[] =
-	    {
-	        { "POS", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0, D3D11_INPUT_PER_INSTANCE_DATA, 0 },
-	        { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 0 },
-	        { "TEXCOORD", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 0 }
-	    };
-
-	    HRESULT hResult = d3d11Device->CreateInputLayout(inputElementDesc, ARRAYSIZE(inputElementDesc), r->sdfFontShader.vsBlob->GetBufferPointer(), r->sdfFontShader.vsBlob->GetBufferSize(), &r->glyph_inputLayout);
-	    assert(SUCCEEDED(hResult));
-	    
-
-	    /*
-		https://docs.microsoft.com/en-us/windows/win32/api/d3d11/nf-d3d11-id3d11device-createinputlayout
-	    Once an input-layout object is created from a shader signature, the input-layout object can be reused with any other shader that has an identical input signature (semantics included). This can simplify the creation of input-layout objects when you are working with many shaders with identical inputs.
-
-	    If a data type in the input-layout declaration does not match the data type in a shader-input signature, CreateInputLayout will generate a warning during compilation. The warning is simply to call attention to the fact that the data may be reinterpreted when read from a register. You may either disregard this warning (if reinterpretation is intentional) or make the data types match in both declarations to eliminate the warning.
-
-	    */
-	}
-
-	{ // Create Sampler State
+	{ // Create Sampler State for texture sampling
 		D3D11_SAMPLER_DESC samplerDesc = {};
 		samplerDesc.Filter         = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
 		samplerDesc.AddressU       = D3D11_TEXTURE_ADDRESS_BORDER;
@@ -299,9 +346,69 @@ static void backendRender_init(BackendRenderer *r) {
 
 		d3d11Device->CreateSamplerState(&samplerDesc, &r->samplerState_linearTexture);
 	}
+
+	{
+
+		D3D11_BLEND_DESC blendDesc;
+		ZeroMemory(&blendDesc, sizeof(blendDesc));
+
+		D3D11_RENDER_TARGET_BLEND_DESC rtbd;
+		ZeroMemory(&rtbd, sizeof(rtbd));
+
+		rtbd.BlendEnable = true;
+		rtbd.SrcBlend = D3D11_BLEND_SRC_ALPHA;
+		rtbd.DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
+		rtbd.BlendOp = D3D11_BLEND_OP_ADD;
+
+		rtbd.SrcBlendAlpha = D3D11_BLEND_ONE;
+		rtbd.DestBlendAlpha = D3D11_BLEND_ZERO;
+		rtbd.BlendOpAlpha = D3D11_BLEND_OP_ADD;
+		
+		rtbd.RenderTargetWriteMask = 0x0f;
+		blendDesc.RenderTarget[0] = rtbd;
+
+		d3d11Device->CreateBlendState(&blendDesc, &r->m_blendMode);
+	}
+
+	{
+		//NOTE: Create the constant buffer
+		{
+		    D3D11_BUFFER_DESC constantBufferDesc = {};
+
+		    // ByteWidth must be a multiple of 16, per the docs
+		    constantBufferDesc.ByteWidth      = sizeof(d3d_Constants) + 0xf & 0xfffffff0;
+		    constantBufferDesc.Usage          = D3D11_USAGE_DYNAMIC;
+		    constantBufferDesc.BindFlags      = D3D11_BIND_CONSTANT_BUFFER;
+		    constantBufferDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+
+		    HRESULT hResult = d3d11Device->CreateBuffer(&constantBufferDesc, nullptr, &r->constantBuffer);
+		    assert(SUCCEEDED(hResult));
+		}
+
+	}
+
+	r->testTexture = d3d_loadFromFileToGPU(d3d11Device, "..\\src\\testTexture.png");
+
+	return 0;
+}
+
+static void d3d_setGlobalConstantBuffer(BackendRenderer *r) {
+	D3D11_MAPPED_SUBRESOURCE mappedSubresource;
+	r->d3d11DeviceContext->Map(r->constantBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedSubresource);
+	d3d_Constants* constants = (d3d_Constants*)(mappedSubresource.pData);
+
+	*constants = r->constants;
+
+	r->d3d11DeviceContext->Unmap(r->constantBuffer, 0);
+
+
+	r->d3d11DeviceContext->VSSetConstantBuffers(0, 1, &r->constantBuffer);
+
 }
 
 static void backendRender_processCommandBuffer(Renderer *r, BackendRenderer *backend_r) {
+
+	ID3D11DeviceContext *d3d11DeviceContext = backend_r->d3d11DeviceContext;
 
 	for(int i = 0; i < r->commandCount; ++i) {
 		RenderCommand *c = r->commands + i;
@@ -310,21 +417,80 @@ static void backendRender_processCommandBuffer(Renderer *r, BackendRenderer *bac
 			case RENDER_NULL: {
 				assert(false);
 			} break;
-			case RENDER_GLYPH: {
+			case RENDER_SET_VIEWPORT: {
+				RECT winRect;
+				GetClientRect(backend_r->window_hwnd, &winRect);
+				D3D11_VIEWPORT viewport = { 0.0f, 0.0f, (FLOAT)(winRect.right - winRect.left), (FLOAT)(winRect.bottom - winRect.top), 0.0f, 1.0f };
+				d3d11DeviceContext->RSSetViewports(1, &viewport);
 
-				float *data = r->glyphInstanceData + c->offset;
-				int sizeInBytes = c->size;
-				
-
-
-				// d3d11DeviceContext->VSSetConstantBuffers(0, 1, &constantBuffer);
-				// d3d11DeviceContext->IASetVertexBuffers(0, 1, &vertexBuffer, &stride, &offset);
-				// d3d11DeviceContext->Draw(numVerts, 0);
-				
+			} break;
+			case RENDER_CLEAR_COLOR_BUFFER: {
+				FLOAT backgroundColor[4] = { c->color.x, c->color.y, c->color.z, c->color.w };
+				d3d11DeviceContext->ClearRenderTargetView(backend_r->default_d3d11FrameBufferView, backgroundColor);
 			} break;
 			case RENDER_MATRIX: {
+				backend_r->constants.orthoMatrix = {c->matrix.E[0], c->matrix.E[1], c->matrix.E[2], c->matrix.E[3],
+										  c->matrix.E[4], c->matrix.E[5], c->matrix.E[6], c->matrix.E[7],
+										  c->matrix.E[8], c->matrix.E[9], c->matrix.E[10], c->matrix.E[11],
+										  c->matrix.E[12], c->matrix.E[13], c->matrix.E[14], c->matrix.E[15]};
+				
+			} break;
+			case RENDER_SET_SHADER: {
+				d3d_shader_program *program = (d3d_shader_program *)c->shader;
+
+				d3d11DeviceContext->VSSetShader(program->vertexShader, nullptr, 0);
+				d3d11DeviceContext->PSSetShader(program->pixelShader, nullptr, 0);
+			} break;
+			case RENDER_GLYPH: {
+
+				u8 *data = r->glyphInstanceData + c->offset_in_bytes;
+				int sizeInBytes = c->size_in_bytes;
+
+				d3d_setGlobalConstantBuffer(backend_r);
+
+				//NOTE: Update the vertex buffer
+				D3D11_MAPPED_SUBRESOURCE mappedSubresource;
+				d3d11DeviceContext->Map(backend_r->instancing_vertex_buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedSubresource);
+				u8* data_on_gpu = (u8*)(mappedSubresource.pData);
+				
+				memcpy(data_on_gpu, data, sizeInBytes);
+
+				d3d11DeviceContext->Unmap(backend_r->instancing_vertex_buffer, 0);
+				//////////
+				
+
+				d3d11DeviceContext->OMSetRenderTargets(1, &backend_r->default_d3d11FrameBufferView, nullptr);
+
+				d3d11DeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+				d3d11DeviceContext->IASetInputLayout(backend_r->glyph_inputLayout);
+
+				float blendFactor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+				UINT sampleMask   = 0xffffffff;
+
+				d3d11DeviceContext->OMSetBlendState(backend_r->m_blendMode, blendFactor, sampleMask);
+
+				// EditorState *editorState = (EditorState *)global_platform.permanent_storage;
+				
+				// GlyphInfo glyph = easyFont_getGlyph(&editorState->font, (u32)'A');
+
+				// ID3D11ShaderResourceView* fontTextureView = (ID3D11ShaderResourceView *)glyph.handle;
+				// d3d11DeviceContext->PSSetShaderResources(0, 1, &fontTextureView);
+
+				// ID3D11ShaderResourceView* textureView
+
+				d3d11DeviceContext->PSSetShaderResources(0, 1, &backend_r->testTexture);
+				d3d11DeviceContext->PSSetSamplers(0, 1, &backend_r->samplerState_linearTexture);
+
+
+				UINT offset = 0;
+				d3d11DeviceContext->IASetVertexBuffers(0, 1, &global_vertexBuffer_quad, &backend_r->quad_stride, &offset);
+
+				d3d11DeviceContext->Draw(backend_r->quad_numVerts, 0);
 
 			} break;
+			default: {
+
+			}
 		}
 	}
 }
