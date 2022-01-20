@@ -18,6 +18,7 @@ typedef struct {
 	float4 viewport; //NOTE: For the RENDER_SET_VIEWPORT
 	void *shader; //NOTE: For the RENDER_SET_SHADER
 
+	int instanceCount;
 	int offset_in_bytes;
 	int size_in_bytes;
 } RenderCommand;
@@ -27,6 +28,8 @@ typedef struct {
 
 #define SIZE_OF_GLYPH_INSTANCE_IN_BYTES (sizeof(float)*10)
 
+#define GLYPH_INSTANCE_DATA_TOTAL_SIZE_IN_BYTES MAX_GLYPH_COUNT*SIZE_OF_GLYPH_INSTANCE_IN_BYTES
+
 typedef struct {
 	RenderCommandType currentType;
 
@@ -35,7 +38,7 @@ typedef struct {
 
 	//NOTE: Instance data
 	int glyphCount;
-	u8  glyphInstanceData[MAX_GLYPH_COUNT*SIZE_OF_GLYPH_INSTANCE_IN_BYTES]; //NOTE: This would be x, y, r, g, b, a, u, v, s, t
+	u8  glyphInstanceData[GLYPH_INSTANCE_DATA_TOTAL_SIZE_IN_BYTES]; //NOTE: This would be x, y, r, g, b, a, u, v, s, t
 
 
 } Renderer;
@@ -46,17 +49,26 @@ static void initRenderer(Renderer *r) {
 	r->glyphCount = 0;
 }
 
+static void clearRenderer(Renderer *r) {
+	r->commandCount = 0;
+	r->currentType = RENDER_NULL;
+	r->glyphCount = 0;	
+}
+
 static RenderCommand *getRenderCommand(Renderer *r, RenderCommandType type) {
 	RenderCommand *command = 0;
 
 	if(r->currentType != type) {
 		if(r->commandCount < MAX_RENDER_COMMAND_COUNT) {
 			command = &r->commands[r->commandCount++];
+			command->type = type;
+			command->instanceCount = 0;
+			command->size_in_bytes = 0;
 				
 			//TODO: Block from adding any more glpyhs
 			if(r->glyphCount < MAX_GLYPH_COUNT) {
 				command->offset_in_bytes = r->glyphCount*SIZE_OF_GLYPH_INSTANCE_IN_BYTES;
-				command->size_in_bytes = 0;
+				
 			} else {
 				assert(!"glyph data buffer full");
 			}
@@ -125,6 +137,7 @@ static void pushGlyph(Renderer *r, void *textureHandle, float2 pos, float4 color
 		data[9] = uv.w;
 
 		r->glyphCount++;
+		c->instanceCount++;
 		c->size_in_bytes += SIZE_OF_GLYPH_INSTANCE_IN_BYTES;
 	}
 }

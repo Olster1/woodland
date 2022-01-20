@@ -47,6 +47,7 @@ typedef struct {
 
 	d3d_Constants constants;
 
+	UINT glyph_instance_buffer_stride;
 	UINT quad_stride;
 	UINT quad_numVerts;
 
@@ -302,7 +303,7 @@ static UINT backendRender_init(BackendRenderer *r, HWND hwnd) {
 	    {
 	    	{ "POS", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 	    	{ "TEX", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-	        { "POS_INSTANCE", 0, DXGI_FORMAT_R32G32_FLOAT, 1, 0, D3D11_INPUT_PER_INSTANCE_DATA, 0 },
+	        { "POS_INSTANCE", 0, DXGI_FORMAT_R32G32_FLOAT, 1, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
 	        { "COLOR_INSTANCE", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 1 }, //NOTE: 1 at the end to say advance every instance, the reason this could be more than 1 is that the instance data might be for every 4 instances like each side of a face if each side represents the an instance, than if we wanted it to be the same color for all faces.  
 	        { "TEXCOORD_INSTANCE", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 1 }
 	    };
@@ -322,9 +323,12 @@ static UINT backendRender_init(BackendRenderer *r, HWND hwnd) {
 	
 	{ //NOTE: create the instancing_vertex_buffer
 	    D3D11_BUFFER_DESC vertexBufferDesc = {};
-	    vertexBufferDesc.ByteWidth = 0;
+	    vertexBufferDesc.ByteWidth = sizeof(GLYPH_INSTANCE_DATA_TOTAL_SIZE_IN_BYTES);
 	    vertexBufferDesc.Usage     = D3D11_USAGE_DYNAMIC;
 	    vertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+	    vertexBufferDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+
+	    r->glyph_instance_buffer_stride = SIZE_OF_GLYPH_INSTANCE_IN_BYTES;
 
 	    HRESULT hResult = d3d11Device->CreateBuffer(&vertexBufferDesc, 0, &r->instancing_vertex_buffer);
 	    assert(SUCCEEDED(hResult));
@@ -464,10 +468,10 @@ static void backendRender_processCommandBuffer(Renderer *r, BackendRenderer *bac
 				d3d11DeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 				d3d11DeviceContext->IASetInputLayout(backend_r->glyph_inputLayout);
 
-				float blendFactor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-				UINT sampleMask   = 0xffffffff;
+				// float blendFactor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+				// UINT sampleMask   = 0xffffffff;
 
-				d3d11DeviceContext->OMSetBlendState(backend_r->m_blendMode, blendFactor, sampleMask);
+				// d3d11DeviceContext->OMSetBlendState(backend_r->m_blendMode, blendFactor, sampleMask);
 
 				// EditorState *editorState = (EditorState *)global_platform.permanent_storage;
 				
@@ -481,11 +485,22 @@ static void backendRender_processCommandBuffer(Renderer *r, BackendRenderer *bac
 				d3d11DeviceContext->PSSetShaderResources(0, 1, &backend_r->testTexture);
 				d3d11DeviceContext->PSSetSamplers(0, 1, &backend_r->samplerState_linearTexture);
 
+			#if 1
+
+				ID3D11Buffer *vertex_buffers[] = {global_vertexBuffer_quad, backend_r->instancing_vertex_buffer};
+				UINT buffer_strides[] = {backend_r->quad_stride, backend_r->glyph_instance_buffer_stride};
+				UINT offsets[] = {0, 0};
+
+				d3d11DeviceContext->IASetVertexBuffers(0, 2, vertex_buffers, buffer_strides, offsets);
+
+				d3d11DeviceContext->DrawInstanced(backend_r->quad_numVerts, c->instanceCount, 0, 0);
+				#else 
 
 				UINT offset = 0;
 				d3d11DeviceContext->IASetVertexBuffers(0, 1, &global_vertexBuffer_quad, &backend_r->quad_stride, &offset);
 
 				d3d11DeviceContext->Draw(backend_r->quad_numVerts, 0);
+				#endif
 
 			} break;
 			default: {

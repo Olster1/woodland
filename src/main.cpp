@@ -45,11 +45,16 @@ static EditorState *updateEditor() {
 		editorState->font = initFont("..\\fonts\\SpaceMono.ttf");
 	}
 
+
+
 	WL_Window *w = &editorState->windows[editorState->bufferAt];
 
 	WL_Buffer *b = &w->buffer;
 
 	Renderer *renderer = &editorState->renderer;
+
+	//NOTE: Clear the renderer out so we can start again
+	clearRenderer(renderer);
 
 	switch(editorState->mode) {
 		case MODE_EDIT_BUFFER: {

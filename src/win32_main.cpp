@@ -93,8 +93,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
     //quit our program
     if(msg == WM_CLOSE || msg == WM_DESTROY) {
         PostQuitMessage(0);
+        //NOTE: quit program handled in our loop
 
-    } if(msg == WM_CHAR) {
+    } else if(msg == WM_CHAR) {
         
         //NOTE: Dont add backspace to the buffer
         if(wparam != VK_BACK) {
@@ -533,6 +534,8 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int
     BackendRenderer *backendRenderer = (BackendRenderer *)Win32HeapAlloc(sizeof(BackendRenderer), true); 
     backendRender_init(backendRenderer, hwnd);
 
+    global_d3d11Device = backendRenderer->d3d11Device;
+
     //NOTE: Create a input buffer to store text input across frames.
     #define MAX_INPUT_BUFFER_SIZE 128
     int textBuffer_count = 0;
@@ -573,8 +576,10 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int
     	MSG msg = {};
         while(PeekMessageW(&msg, 0, 0, 0, PM_REMOVE))
         {
-            if(msg.message == WM_QUIT)
+            if(msg.message == WM_QUIT) {
                 running = false;
+            }
+
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
         }
