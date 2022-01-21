@@ -323,7 +323,7 @@ static UINT backendRender_init(BackendRenderer *r, HWND hwnd) {
 	
 	{ //NOTE: create the instancing_vertex_buffer
 	    D3D11_BUFFER_DESC vertexBufferDesc = {};
-	    vertexBufferDesc.ByteWidth = sizeof(GLYPH_INSTANCE_DATA_TOTAL_SIZE_IN_BYTES);
+	    vertexBufferDesc.ByteWidth = (UINT)GLYPH_INSTANCE_DATA_TOTAL_SIZE_IN_BYTES;
 	    vertexBufferDesc.Usage     = D3D11_USAGE_DYNAMIC;
 	    vertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
 	    vertexBufferDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
