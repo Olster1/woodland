@@ -32,6 +32,7 @@
 static PlatformLayer global_platform;
 static HWND global_wndHandle;
 static ID3D11Device1 *global_d3d11Device;
+static bool global_windowDidResize = false;
 
 enum PlatformKeyType {
     PLATFORM_KEY_NULL,
@@ -97,6 +98,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
         PostQuitMessage(0);
         //NOTE: quit program handled in our loop
 
+    } else if(msg == WM_SIZE) {
+        global_windowDidResize = true;
     } else if(msg == WM_DPICHANGED) {
         global_platformInput.dpi_for_window = GetDpiForWindow(hwnd);
     } else if(msg == WM_CHAR) {
@@ -658,6 +661,15 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int
         //NOTE: Replace characters above the cursor that we would have written over
         for(int i = 0; i < tempBufferCount; ++i) {
             textBuffer[cursorAt + i] = tempBuffer[i]; 
+        }
+
+        if(global_windowDidResize)
+        {
+            d3d_release_and_resize_default_frame_buffer(backendRenderer);
+
+            //NOTE: Make new ortho matrix here
+
+            global_windowDidResize = false;
         }
 
         //NOTE: Should cache these values 

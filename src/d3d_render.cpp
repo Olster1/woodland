@@ -145,6 +145,35 @@ static void d3d_createShaderProgram_vs_ps(ID3D11Device1 *d3d11Device, LPCWSTR vs
 
 }
 
+static void getDefaultFrameBuffer_fromSwapChain(BackendRenderer *r) {
+	IDXGISwapChain1* d3d11SwapChain = r->d3d11SwapChain;
+	// Create Framebuffer Render Target for the swapchain (the default one that represents the screen)
+	ID3D11RenderTargetView* default_d3d11FrameBufferView;
+	{
+	    ID3D11Texture2D* d3d11FrameBuffer;
+	    HRESULT hResult = d3d11SwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void**)&d3d11FrameBuffer);
+	    assert(SUCCEEDED(hResult));
+
+	    hResult = r->d3d11Device->CreateRenderTargetView(d3d11FrameBuffer, 0, &default_d3d11FrameBufferView);
+	    assert(SUCCEEDED(hResult));
+	    d3d11FrameBuffer->Release();
+	}
+	r->default_d3d11FrameBufferView = default_d3d11FrameBufferView;
+}
+
+
+static void d3d_release_and_resize_default_frame_buffer(BackendRenderer *backendRenderer) {
+    backendRenderer->d3d11DeviceContext->OMSetRenderTargets(0, 0, 0);
+    backendRenderer->default_d3d11FrameBufferView->Release();
+    // depthBufferView->Release();
+
+    HRESULT res = backendRenderer->d3d11SwapChain->ResizeBuffers(0, 0, 0, DXGI_FORMAT_UNKNOWN, 0);
+    assert(SUCCEEDED(res));
+
+    getDefaultFrameBuffer_fromSwapChain(backendRenderer);
+    
+}
+
 static UINT backendRender_init(BackendRenderer *r, HWND hwnd) {
 
 #define DEBUG_BUILD 1
@@ -246,21 +275,9 @@ static UINT backendRender_init(BackendRenderer *r, HWND hwnd) {
 	    dxgiFactory->Release();
 	}
 
-	IDXGISwapChain1* d3d11SwapChain = r->d3d11SwapChain;
 
 
-	// Create Framebuffer Render Target for the swapchain (the default one that represents the screen)
-	ID3D11RenderTargetView* default_d3d11FrameBufferView;
-	{
-	    ID3D11Texture2D* d3d11FrameBuffer;
-	    HRESULT hResult = d3d11SwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void**)&d3d11FrameBuffer);
-	    assert(SUCCEEDED(hResult));
-
-	    hResult = d3d11Device->CreateRenderTargetView(d3d11FrameBuffer, 0, &default_d3d11FrameBufferView);
-	    assert(SUCCEEDED(hResult));
-	    d3d11FrameBuffer->Release();
-	}
-	r->default_d3d11FrameBufferView = default_d3d11FrameBufferView;
+	getDefaultFrameBuffer_fromSwapChain(r);
 
 	{ //NOTE: Create all shader programs
 
