@@ -81,6 +81,8 @@ struct PlatformInputState {
     int keyInputCommand_count;
 
     WCHAR low_surrogate;
+
+    UINT dpi_for_window;
 };
 
 static PlatformInputState global_platformInput;
@@ -95,6 +97,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
         PostQuitMessage(0);
         //NOTE: quit program handled in our loop
 
+    } else if(msg == WM_DPICHANGED) {
+        global_platformInput.dpi_for_window = GetDpiForWindow(hwnd);
     } else if(msg == WM_CHAR) {
         
         //NOTE: Dont add backspace to the buffer
@@ -534,6 +538,12 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int
     BackendRenderer *backendRenderer = (BackendRenderer *)Win32HeapAlloc(sizeof(BackendRenderer), true); 
     backendRender_init(backendRenderer, hwnd);
 
+    global_platformInput.dpi_for_window = GetDpiForWindow(hwnd);
+
+    char buffer[256];
+    sprintf(buffer, "%d\n", global_platformInput.dpi_for_window);
+    OutputDebugStringA(buffer);
+
     global_d3d11Device = backendRenderer->d3d11Device;
 
     //NOTE: Create a input buffer to store text input across frames.
@@ -553,11 +563,39 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int
     global_platform.scratch_storage = VirtualAlloc(0, global_platform.scratch_storage_size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
     /////////////////////
 
+    // Timing
+    LONGLONG startPerfCount = 0;
+    LONGLONG perfCounterFrequency = 0;
+    {
+        //NOTE: Get the current performance counter at this moment to act as our reference
+        LARGE_INTEGER perfCount;
+        QueryPerformanceCounter(&perfCount);
+        startPerfCount = perfCount.QuadPart;
 
+        //NOTE: Get the Frequency of the performance counter to be able to convert from counts to seconds
+        LARGE_INTEGER perfFreq;
+        QueryPerformanceFrequency(&perfFreq);
+        perfCounterFrequency = perfFreq.QuadPart;
+
+    }
+
+    //NOTE: To store the last time in
+    double currentTimeInSeconds = 0.0;
     
 
     bool running = true;
     while(running) {
+
+        //NOTE: Inside game loop
+        float dt;
+        {
+            double previousTimeInSeconds = currentTimeInSeconds;
+            LARGE_INTEGER perfCount;
+            QueryPerformanceCounter(&perfCount);
+
+            currentTimeInSeconds = (double)(perfCount.QuadPart - startPerfCount) / (double)perfCounterFrequency;
+            dt = (float)(currentTimeInSeconds - previousTimeInSeconds);
+        }
 
         //NOTE: Clear the input text buffer to empty
         global_platformInput.textInput_bytesUsed = 0;
@@ -622,7 +660,11 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int
             textBuffer[cursorAt + i] = tempBuffer[i]; 
         }
 
-        EditorState *editorState = updateEditor();
+        //NOTE: Should cache these values 
+        RECT winRect;
+        GetClientRect(hwnd, &winRect);
+
+        EditorState *editorState = updateEditor(dt, (float)(winRect.right - winRect.left), (float)(winRect.bottom - winRect.top));
 
 
         // //NOTE: Process our command buffer
@@ -675,7 +717,9 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int
         backendRender_processCommandBuffer(&editorState->renderer, backendRenderer);
 
         backendRender_presentFrame(backendRenderer);
-        
+    
+
+
     }
     
     return 0;

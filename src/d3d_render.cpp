@@ -303,7 +303,8 @@ static UINT backendRender_init(BackendRenderer *r, HWND hwnd) {
 	    {
 	    	{ "POS", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 	    	{ "TEX", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-	        { "POS_INSTANCE", 0, DXGI_FORMAT_R32G32_FLOAT, 1, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
+	        { "POS_INSTANCE", 0, DXGI_FORMAT_R32G32B32_FLOAT, 1, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
+	        { "SCALE_INSTANCE", 0, DXGI_FORMAT_R32G32_FLOAT, 1, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
 	        { "COLOR_INSTANCE", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 1 }, //NOTE: 1 at the end to say advance every instance, the reason this could be more than 1 is that the instance data might be for every 4 instances like each side of a face if each side represents the an instance, than if we wanted it to be the same color for all faces.  
 	        { "TEXCOORD_INSTANCE", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 1 }
 	    };
@@ -433,10 +434,7 @@ static void backendRender_processCommandBuffer(Renderer *r, BackendRenderer *bac
 				d3d11DeviceContext->ClearRenderTargetView(backend_r->default_d3d11FrameBufferView, backgroundColor);
 			} break;
 			case RENDER_MATRIX: {
-				backend_r->constants.orthoMatrix = {c->matrix.E[0], c->matrix.E[1], c->matrix.E[2], c->matrix.E[3],
-										  c->matrix.E[4], c->matrix.E[5], c->matrix.E[6], c->matrix.E[7],
-										  c->matrix.E[8], c->matrix.E[9], c->matrix.E[10], c->matrix.E[11],
-										  c->matrix.E[12], c->matrix.E[13], c->matrix.E[14], c->matrix.E[15]};
+				backend_r->constants.orthoMatrix = c->matrix;
 				
 			} break;
 			case RENDER_SET_SHADER: {

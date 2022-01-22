@@ -30,7 +30,7 @@ typedef struct {
 
 
 
-static EditorState *updateEditor() {
+static EditorState *updateEditor(float dt, float windowWidth, float windowHeight) {
 	EditorState *editorState = (EditorState *)global_platform.permanent_storage;
 	assert(sizeof(EditorState) < global_platform.permanent_storage_size);
 	if(!editorState->initialized) {
@@ -111,6 +111,17 @@ static EditorState *updateEditor() {
 
 	u8 *at = str;
 
+	pushViewport(renderer, make_float4(0, 0, 0, 0));
+	pushClearColor(renderer, make_float4(1, 0.5f, 0, 1)); 
+	pushShader(renderer, &sdfFontShader);
+
+	float2 scale = make_float2(100, 100);
+
+	float16 orthoMatrix = make_ortho_matrix_bottom_left_corner(windowWidth, windowHeight, MATH_3D_NEAR_CLIP_PlANE, MATH_3D_FAR_CLIP_PlANE);
+	pushMatrix(renderer, orthoMatrix);
+	pushGlyph(renderer, NULL, make_float3(0.5f*windowWidth, 0.5f*windowHeight, 1.0f), scale, make_float4(1, 1, 1, 1), make_float4(0, 1, 0, 1));
+	
+
 	//NOTE: Output the buffer
 	for(int i = 0; i < easyString_getSizeInBytes_utf8((char *)str); ++i) {
 		u32 rune = easyUnicode_utf8_codepoint_To_Utf32_codepoint(&((char *)at), true);
@@ -124,11 +135,14 @@ static EditorState *updateEditor() {
 			if(g.hasTexture) {
 
 				float4 color = make_float4(1, 1, 1, 1);
+				float2 scale = make_float2(10, 10);
 
-				float2 pos = {};
+				float3 pos = {};
 				pos.x = xAt + g.xoffset;
 				pos.y = yAt + g.yoffset;
-				pushGlyph(renderer, g.handle, pos, color, g.uvCoords);
+				pos.z = 1.0f;
+				// pushGlyph(renderer, NULL, make_float3(0.5f*windowWidth, 0.5f*windowHeight, 1.0f), scale, make_float4(1, 1, 1, 1), make_float4(0, 1, 0, 1));
+				pushGlyph(renderer, g.handle, pos, scale, color, g.uvCoords);
 			}
 
 			xAt += g.width;
@@ -179,16 +193,7 @@ static EditorState *updateEditor() {
 	}
 
 
-	pushViewport(renderer, make_float4(0, 0, 0, 0));
-	pushClearColor(renderer, make_float4(1, 0.5f, 0, 1)); 
-	pushShader(renderer, &sdfFontShader);
-	pushGlyph(renderer, NULL, make_float2(0, 0), make_float4(1, 1, 1, 1), make_float4(0, 1, 0, 1));
-
-
-
-
-
-
+	
 
 	return editorState;
 

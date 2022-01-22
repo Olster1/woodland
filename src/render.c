@@ -26,7 +26,7 @@ typedef struct {
 #define MAX_GLYPH_COUNT 16384
 #define MAX_RENDER_COMMAND_COUNT 1028
 
-#define SIZE_OF_GLYPH_INSTANCE_IN_BYTES (sizeof(float)*10)
+#define SIZE_OF_GLYPH_INSTANCE_IN_BYTES (sizeof(float)*13)
 
 #define GLYPH_INSTANCE_DATA_TOTAL_SIZE_IN_BYTES MAX_GLYPH_COUNT*SIZE_OF_GLYPH_INSTANCE_IN_BYTES
 
@@ -115,7 +115,7 @@ static void pushClearColor(Renderer *r, float4 color) {
 	c->color = color;
 }
 
-static void pushGlyph(Renderer *r, void *textureHandle, float2 pos, float4 color, float4 uv) {
+static void pushGlyph(Renderer *r, void *textureHandle, float3 pos, float2 size, float4 color, float4 uv) {
 	RenderCommand *c = getRenderCommand(r, RENDER_GLYPH);
 
 	assert(c->type == RENDER_GLYPH);
@@ -125,16 +125,20 @@ static void pushGlyph(Renderer *r, void *textureHandle, float2 pos, float4 color
 
 		data[0] = pos.x;
 		data[1] = pos.y;
-		
-		data[2] = color.x;
-		data[3] = color.y;
-		data[4] = color.z;
-		data[5] = color.w;
+		data[2] = pos.z;
 
-		data[6] = uv.x;
-		data[7] = uv.y;
-		data[8] = uv.z;
-		data[9] = uv.w;
+		data[3] = size.x;
+		data[4] = size.y;
+		
+		data[5] = color.x;
+		data[6] = color.y;
+		data[7] = color.z;
+		data[8] = color.w;
+
+		data[9] = uv.x;
+		data[10] = uv.y;
+		data[11] = uv.z;
+		data[12] = uv.w;
 
 		r->glyphCount++;
 		c->instanceCount++;

@@ -6,7 +6,8 @@ cbuffer constants : register(b0)
 struct VS_Input {
     float3 pos : POS;
     float2 uv : TEX;
-    float2 pos1 : POS_INSTANCE;
+    float3 pos1 : POS_INSTANCE;
+    float2 scale1 : SCALE_INSTANCE;
     float4 color1 : COLOR_INSTANCE;
     float4 uv1 : TEXCOORD_INSTANCE;
 
@@ -29,7 +30,17 @@ VS_Output vs_main(VS_Input input)
     // output.pos = float4(input.pos + instance_input.pos1, 0.0f, 1.0f);
     // output.uv.x = lerp(instance_input.uv1.x, instance_input.uv1.y, input.uv.x);
     // output.uv.y = lerp(instance_input.uv1.z, instance_input.uv1.w, input.uv.y);
-    output.pos = float4(input.pos.x, input.pos.y, 0, 1.0f);
+
+    float3 pos = input.pos;
+
+    pos.x *= input.scale1.x;
+    pos.y *= input.scale1.y;
+
+    pos += input.pos1;
+
+    output.pos = mul(orthoMatrix, float4(pos, 1.0f));
+
+    //output.pos = float4(input.pos.x, input.pos.y, 0, 1.0f);
     output.uv = input.uv;
     output.color = input.color1;//float4(1, 0, 0, 0);
     return output;
