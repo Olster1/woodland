@@ -11,6 +11,8 @@ typedef struct {
 
 
 d3d_shader_program sdfFontShader;
+d3d_shader_program textureShader;
+
 
 
 //NOTE: Example of 16byte aligned struct 
@@ -53,6 +55,9 @@ typedef struct {
 
 	ID3D11ShaderResourceView* testTexture;
 
+	ID3D11ShaderResourceView* white_texture;	
+
+
 } BackendRenderer;
 
 
@@ -83,6 +88,49 @@ static ID3D11ShaderResourceView* d3d_loadFromFileToGPU(ID3D11Device1 *d3d11Devic
 
 	ID3D11Texture2D* texture;
 	d3d11Device->CreateTexture2D(&textureDesc, &textureSubresourceData, &texture);
+
+	ID3D11ShaderResourceView* textureView;
+	d3d11Device->CreateShaderResourceView(texture, nullptr, &textureView);
+
+	free(testTextureBytes);
+
+	return textureView;
+}
+
+static ID3D11ShaderResourceView* d3d_loadFromFileToGPU_array(ID3D11Device1 *d3d11Device, char *image_to_load_utf8_array, int arrayCount) {
+	// Load Image
+	int texWidth;
+	int texHeight;
+	unsigned char *testTextureBytes = (unsigned char *)stbi_load("..\\src\\green.png", &texWidth, &texHeight, 0, STBI_rgb_alpha);
+	unsigned char *testTextureBytes1 = (unsigned char *)stbi_load("..\\src\\blue.png", &texWidth, &texHeight, 0, STBI_rgb_alpha);
+	unsigned char *testTextureBytes2 = (unsigned char *)stbi_load("..\\src\\orange.png", &texWidth, &texHeight, 0, STBI_rgb_alpha);
+	int texBytesPerRow = 4 * texWidth;
+
+	assert(testTextureBytes);
+
+	// Create Texture
+	D3D11_TEXTURE2D_DESC textureDesc = {};
+	textureDesc.Width              = texWidth;
+	textureDesc.Height             = texHeight;
+	textureDesc.MipLevels          = 1;
+	textureDesc.ArraySize          = arrayCount;
+	textureDesc.Format             = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+	textureDesc.SampleDesc.Count   = 1;
+	textureDesc.Usage              = D3D11_USAGE_IMMUTABLE;
+	textureDesc.BindFlags          = D3D11_BIND_SHADER_RESOURCE;
+
+	D3D11_SUBRESOURCE_DATA textureSubresourceDatas[3] = {};
+	textureSubresourceDatas[0].pSysMem = testTextureBytes;
+	textureSubresourceDatas[0].SysMemPitch = texBytesPerRow;
+
+	textureSubresourceDatas[1].pSysMem = testTextureBytes1;
+	textureSubresourceDatas[1].SysMemPitch = texBytesPerRow;
+
+	textureSubresourceDatas[2].pSysMem = testTextureBytes2;
+	textureSubresourceDatas[2].SysMemPitch = texBytesPerRow;
+
+	ID3D11Texture2D* texture;
+	d3d11Device->CreateTexture2D(&textureDesc, textureSubresourceDatas, &texture);
 
 	ID3D11ShaderResourceView* textureView;
 	d3d11Device->CreateShaderResourceView(texture, nullptr, &textureView);
@@ -282,6 +330,7 @@ static UINT backendRender_init(BackendRenderer *r, HWND hwnd) {
 	{ //NOTE: Create all shader programs
 
 	d3d_createShaderProgram_vs_ps(d3d11Device, L"..\\src\\sdf_font.hlsl", L"..\\src\\sdf_font.hlsl", &sdfFontShader);
+	d3d_createShaderProgram_vs_ps(d3d11Device, L"..\\src\\texture.hlsl", L"..\\src\\texture.hlsl", &textureShader);
 	
 	}
 		
@@ -323,7 +372,8 @@ static UINT backendRender_init(BackendRenderer *r, HWND hwnd) {
 	        { "POS_INSTANCE", 0, DXGI_FORMAT_R32G32B32_FLOAT, 1, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
 	        { "SCALE_INSTANCE", 0, DXGI_FORMAT_R32G32_FLOAT, 1, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
 	        { "COLOR_INSTANCE", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 1 }, //NOTE: 1 at the end to say advance every instance, the reason this could be more than 1 is that the instance data might be for every 4 instances like each side of a face if each side represents the an instance, than if we wanted it to be the same color for all faces.  
-	        { "TEXCOORD_INSTANCE", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 1 }
+	        { "TEXCOORD_INSTANCE", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
+	        { "TEX_ARRAY_INDEX", 0, DXGI_FORMAT_R32_FLOAT, 1, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 1 }
 	    };
 
 	    HRESULT hResult = d3d11Device->CreateInputLayout(inputElementDesc, ARRAYSIZE(inputElementDesc), sdfFontShader.vsBlob->GetBufferPointer(), sdfFontShader.vsBlob->GetBufferSize(), &r->glyph_inputLayout);
@@ -409,7 +459,14 @@ static UINT backendRender_init(BackendRenderer *r, HWND hwnd) {
 
 	}
 
+	// r->testTexture = d3d_loadFromFileToGPU_array(d3d11Device, "..\\src\\testTexture.png", 3);
 	r->testTexture = d3d_loadFromFileToGPU(d3d11Device, "..\\src\\testTexture.png");
+
+
+	if(!r->white_texture) {
+		r->white_texture = d3d_loadFromFileToGPU(d3d11Device, "..\\src\\white_texture.png");
+	}
+
 
 	return 0;
 }
@@ -497,10 +554,17 @@ static void backendRender_processCommandBuffer(Renderer *r, BackendRenderer *bac
 
 				// ID3D11ShaderResourceView* textureView
 
-				d3d11DeviceContext->PSSetShaderResources(0, 1, &backend_r->testTexture);
-				d3d11DeviceContext->PSSetSamplers(0, 1, &backend_r->samplerState_linearTexture);
+				//NOTE: Set the texture array
+				assert(c->textureHandle_count > 0);
+				// c->texture_handles;
 
-			#if 1
+				// d3d11DeviceContext->PSSetShaderResources(0, 1, &backend_r->testTexture);
+
+				//NOTE: We just use the first texture handle
+				ID3D11ShaderResourceView *texture = (ID3D11ShaderResourceView *)c->texture_handles[0];
+
+				d3d11DeviceContext->PSSetShaderResources(0, 1, &texture);
+				d3d11DeviceContext->PSSetSamplers(0, 1, &backend_r->samplerState_linearTexture);
 
 				ID3D11Buffer *vertex_buffers[] = {global_vertexBuffer_quad, backend_r->instancing_vertex_buffer};
 				UINT buffer_strides[] = {backend_r->quad_stride, backend_r->glyph_instance_buffer_stride};
@@ -509,13 +573,64 @@ static void backendRender_processCommandBuffer(Renderer *r, BackendRenderer *bac
 				d3d11DeviceContext->IASetVertexBuffers(0, 2, vertex_buffers, buffer_strides, offsets);
 
 				d3d11DeviceContext->DrawInstanced(backend_r->quad_numVerts, c->instanceCount, 0, 0);
-				#else 
 
-				UINT offset = 0;
-				d3d11DeviceContext->IASetVertexBuffers(0, 1, &global_vertexBuffer_quad, &backend_r->quad_stride, &offset);
+			} break;
+			case RENDER_TEXTURE: {
 
-				d3d11DeviceContext->Draw(backend_r->quad_numVerts, 0);
-				#endif
+				u8 *data = r->textureInstanceData + c->offset_in_bytes;
+				int sizeInBytes = c->size_in_bytes;
+
+				d3d_setGlobalConstantBuffer(backend_r);
+
+				//NOTE: Update the vertex buffer
+				D3D11_MAPPED_SUBRESOURCE mappedSubresource;
+				d3d11DeviceContext->Map(backend_r->instancing_vertex_buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedSubresource);
+				u8* data_on_gpu = (u8*)(mappedSubresource.pData);
+				
+				memcpy(data_on_gpu, data, sizeInBytes);
+
+				d3d11DeviceContext->Unmap(backend_r->instancing_vertex_buffer, 0);
+				//////////
+				
+
+				d3d11DeviceContext->OMSetRenderTargets(1, &backend_r->default_d3d11FrameBufferView, nullptr);
+
+				d3d11DeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+				d3d11DeviceContext->IASetInputLayout(backend_r->glyph_inputLayout);
+
+				// float blendFactor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+				// UINT sampleMask   = 0xffffffff;
+
+				// d3d11DeviceContext->OMSetBlendState(backend_r->m_blendMode, blendFactor, sampleMask);
+
+				// EditorState *editorState = (EditorState *)global_platform.permanent_storage;
+				
+				// GlyphInfo glyph = easyFont_getGlyph(&editorState->font, (u32)'A');
+
+				// ID3D11ShaderResourceView* fontTextureView = (ID3D11ShaderResourceView *)glyph.handle;
+				// d3d11DeviceContext->PSSetShaderResources(0, 1, &fontTextureView);
+
+				// ID3D11ShaderResourceView* textureView
+
+				//NOTE: Set the texture array
+				assert(c->textureHandle_count > 0);
+				// c->texture_handles;
+
+				// d3d11DeviceContext->PSSetShaderResources(0, 1, &backend_r->testTexture);
+
+				//NOTE: We just use the first texture handle
+				ID3D11ShaderResourceView *texture = (ID3D11ShaderResourceView *)c->texture_handles[0];
+
+				d3d11DeviceContext->PSSetShaderResources(0, 1, &texture);
+				d3d11DeviceContext->PSSetSamplers(0, 1, &backend_r->samplerState_linearTexture);
+
+				ID3D11Buffer *vertex_buffers[] = {global_vertexBuffer_quad, backend_r->instancing_vertex_buffer};
+				UINT buffer_strides[] = {backend_r->quad_stride, backend_r->glyph_instance_buffer_stride};
+				UINT offsets[] = {0, 0};
+
+				d3d11DeviceContext->IASetVertexBuffers(0, 2, vertex_buffers, buffer_strides, offsets);
+
+				d3d11DeviceContext->DrawInstanced(backend_r->quad_numVerts, c->instanceCount, 0, 0);
 
 			} break;
 			default: {

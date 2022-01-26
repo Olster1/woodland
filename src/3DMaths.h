@@ -71,3 +71,23 @@ static float16 make_ortho_matrix_bottom_left_corner(float planeWidth, float plan
 
 	return result;
 }
+
+static float16 make_ortho_matrix_top_left_corner(float planeWidth, float planeHeight, float nearClip, float farClip) {
+	//NOTE: The size of the plane we're projection onto
+	float a = 2.0f / planeWidth;
+	float b = 2.0f / planeHeight;
+
+	//NOTE: We can offset the origin of the viewport by adding these to the translation part of the matrix
+	float originOffsetX = -1; //NOTE: Defined in NDC space
+	float originOffsetY = 1; //NOTE: Defined in NDC space
+
+
+	float16 result = {{
+	        a, 0, 0, 0,
+	        0, b, 0, 0,
+	        0, 0, 1.0f/(farClip - nearClip), 0,
+	        originOffsetX, originOffsetY, nearClip/(nearClip - farClip), 1
+	    }};
+
+	return result;
+}

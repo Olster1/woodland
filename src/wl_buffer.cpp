@@ -153,6 +153,9 @@ static u8 *compileBuffer_toNullTerminateString(WL_Buffer *b) {
 		result[b->bufferSize_inUse_inBytes] = '|';
 	}
 
+	result[b->bufferSize_inBytes + 1] = '\0'; //null terminate the buffer
+
+
 	return result;
 }
 

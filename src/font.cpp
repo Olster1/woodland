@@ -94,13 +94,17 @@ FontSheet *createFontSheet(Font *font, u32 firstChar, u32 endChar) {
         int height;
         int xoffset; 
         int yoffset;
+
+        assert((endChar - firstChar) <= 256);
         
         u8 *data = stbtt_GetCodepointSDF(fontInfo, scale, codeIndex, padding, onedge_value, pixel_dist_scale, &width, &height, &xoffset, &yoffset);    
-        
-        if(width > 0 && height > 0) {
-                
-            assert(sheet->glyphCount < MY_MAX_GLYPH_COUNT);
-            GlyphInfo *info = &sheet->glyphs[sheet->glyphCount++];
+            
+        assert(sheet->glyphCount < MY_MAX_GLYPH_COUNT);
+        GlyphInfo *info = &sheet->glyphs[sheet->glyphCount++];
+
+        memset(info, 0, sizeof(GlyphInfo));
+
+        if(data) {
 
             info->unicodePoint = codeIndex;
 
@@ -108,13 +112,17 @@ FontSheet *createFontSheet(Font *font, u32 firstChar, u32 endChar) {
 
             info->xoffset = xoffset;
             info->yoffset = yoffset;
-            info->hasTexture = data;
+            info->hasTexture = true;
+
+            // char string[256];
+            // sprintf(string, "%c: %d\n", codeIndex, info->hasTexture);
+            // OutputDebugStringA((char *)string);
 
             info->width = width;
             info->height = height;
             // info->aspectRatio_h_over_w = height / width;
 
-            if(info->sdfBitmap) {
+            { //NOTE: Update the font sheet atlas
                 totalWidth += width;
                 counAt++;
 

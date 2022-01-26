@@ -43,9 +43,9 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 		editorState->mode = MODE_EDIT_BUFFER;
 
 		editorState->font = initFont("..\\fonts\\SpaceMono.ttf");
+
+		
 	}
-
-
 
 	WL_Window *w = &editorState->windows[editorState->bufferAt];
 
@@ -78,12 +78,9 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 
 			        //NOTE: Move cursor left 
 			        if(b->cursorAt_inBytes > 0) {
-			        	
-			        	
 
 			        	u32 bytesOfPrevRune = 1;
 			            b->cursorAt_inBytes -= bytesOfPrevRune;
-
 			            
 			        }
 			    }
@@ -104,12 +101,10 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 		} break;
 	}
 
+
 	u8 *str = compileBuffer_toNullTerminateString(b);
 
-	u32 xAt = 0;
-	u32 yAt = 0;
-
-	u8 *at = str;
+	// OutputDebugStringA((LPCSTR)str);
 
 	pushViewport(renderer, make_float4(0, 0, 0, 0));
 	pushClearColor(renderer, make_float4(1, 0.5f, 0, 1)); 
@@ -117,25 +112,51 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 
 	float2 scale = make_float2(100, 100);
 
-	float16 orthoMatrix = make_ortho_matrix_bottom_left_corner(windowWidth, windowHeight, MATH_3D_NEAR_CLIP_PlANE, MATH_3D_FAR_CLIP_PlANE);
+	float16 orthoMatrix = make_ortho_matrix_top_left_corner(windowWidth, windowHeight, MATH_3D_NEAR_CLIP_PlANE, MATH_3D_FAR_CLIP_PlANE);
 	pushMatrix(renderer, orthoMatrix);
-	pushGlyph(renderer, NULL, make_float3(0.5f*windowWidth, 0.5f*windowHeight, 1.0f), scale, make_float4(1, 1, 1, 1), make_float4(0, 1, 0, 1));
-	
+
+	float fontScale = 2.0f;
+
+	float xAt = 0;
+	float yAt = 0;//-editorState->font.fontHeight*fontScale;
+
+	u8 *at = str;
 
 	//NOTE: Output the buffer
-	for(int i = 0; i < easyString_getSizeInBytes_utf8((char *)str); ++i) {
-		u32 rune = easyUnicode_utf8_codepoint_To_Utf32_codepoint(&((char *)at), true);
+	while(*at) {
 
-		if(rune == '\n') {
-			yAt += editorState->font.fontHeight;
+#define UTF8_ADVANCE 1
+#if UTF8_ADVANCE
+		u32 rune = easyUnicode_utf8_codepoint_To_Utf32_codepoint(&((char *)at), true);
+#else 
+		u32 rune = (u32)(*at);
+		at++;
+
+#endif
+
+		//NOTE: DEBUG PURPOSES
+		// GlyphInfo g = easyFont_getGlyph(&editorState->font, rune);
+		// char string[256];
+  //       sprintf(string, "%c: %d\n", rune, g.hasTexture);
+
+  //       OutputDebugStringA((char *)string);
+
+		
+
+		if(rune == '\n' || rune == '\r') {
+			yAt -= editorState->font.fontHeight*fontScale;
 			xAt = 0;
 		} else {
 			GlyphInfo g = easyFont_getGlyph(&editorState->font, rune);
 
+			if(rune == ' ') {
+				g.width = easyFont_getGlyph(&editorState->font, 'M').width;
+			}
+
 			if(g.hasTexture) {
 
 				float4 color = make_float4(1, 1, 1, 1);
-				float2 scale = make_float2(10, 10);
+				float2 scale = make_float2(g.width*fontScale, g.height*fontScale);
 
 				float3 pos = {};
 				pos.x = xAt + g.xoffset;
@@ -145,7 +166,7 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 				pushGlyph(renderer, g.handle, pos, scale, color, g.uvCoords);
 			}
 
-			xAt += g.width;
+			xAt += g.width*fontScale;
 
 		}
 	}
