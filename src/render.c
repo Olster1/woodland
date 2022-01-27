@@ -71,6 +71,7 @@ static void clearRenderer(Renderer *r) {
 	r->commandCount = 0;
 	r->currentType = RENDER_NULL;
 	r->glyphCount = 0;	
+	r->textureCount = 0;
 }
 
 static void render_endCommand(Renderer *r) {
@@ -89,14 +90,24 @@ static RenderCommand *getRenderCommand(Renderer *r, RenderCommandType type) {
 			command->size_in_bytes = 0;
 			command->textureHandle_count = 0;
 			r->currentType = type;
-				
-			//TODO: Block from adding any more glpyhs
-			if(r->glyphCount < MAX_GLYPH_COUNT) {
-				command->offset_in_bytes = r->glyphCount*SIZE_OF_GLYPH_INSTANCE_IN_BYTES;
-				
-			} else {
-				assert(!"glyph data buffer full");
+			
+			if(type == RENDER_GLYPH) {		
+				//TODO: Block from adding any more glpyhs
+				if(r->glyphCount < MAX_GLYPH_COUNT) {
+					command->offset_in_bytes = r->glyphCount*SIZE_OF_GLYPH_INSTANCE_IN_BYTES;
+					
+				} else {
+					assert(!"glyph data buffer full");
+				}
+			} else if(type == RENDER_TEXTURE) {
+				if(r->textureCount < MAX_TEXTURE_COUNT) {
+					command->offset_in_bytes = r->textureCount*SIZE_OF_TEXTURE_INSTANCE_IN_BYTES;
+				} else {
+					assert(!"texture data buffer full");
+				}
 			}
+
+			
 		} else {
 			assert(!"Command buffer full");
 		}
@@ -166,6 +177,7 @@ static int render_getTextureIndex(RenderCommand *c, void *textureHandle) {
 }
 
 static void pushGlyph(Renderer *r, void *textureHandle, float3 pos, float2 size, float4 color, float4 uv) {
+
 	RenderCommand *c = getRenderCommand(r, RENDER_GLYPH);
 	int textureIndex = render_getTextureIndex(c, textureHandle);
 
@@ -179,7 +191,6 @@ static void pushGlyph(Renderer *r, void *textureHandle, float3 pos, float2 size,
 
 	assert(c->type == RENDER_GLYPH);
 	
-
 	if(r->glyphCount < MAX_GLYPH_COUNT) {
 		float *data = (float *)(r->glyphInstanceData + r->glyphCount*SIZE_OF_GLYPH_INSTANCE_IN_BYTES);
 
@@ -216,7 +227,7 @@ static void pushTexture(Renderer *r, void *textureHandle, float3 pos, float2 siz
 	if(textureIndex < 0) {
 		render_endCommand(r);
 
-		RenderCommand *c = getRenderCommand(r, RENDER_GLYPH);
+		RenderCommand *c = getRenderCommand(r, RENDER_TEXTURE);
 		int textureIndex = render_getTextureIndex(c, textureHandle);
 		assert(textureIndex >= 0);
 	}

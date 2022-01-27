@@ -1,3 +1,2 @@
-build.bat
-
-..\bin\Woodland.exe
+call build.bat
+call run.bat

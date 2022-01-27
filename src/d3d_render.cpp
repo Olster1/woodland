@@ -1,4 +1,6 @@
-ID3D11Buffer* global_vertexBuffer_quad;
+static ID3D11Buffer* global_vertexBuffer_quad;
+static void* global_white_texture;
+static void* global_testTexture;
 
 typedef struct {
 
@@ -12,7 +14,6 @@ typedef struct {
 
 d3d_shader_program sdfFontShader;
 d3d_shader_program textureShader;
-
 
 
 //NOTE: Example of 16byte aligned struct 
@@ -55,7 +56,7 @@ typedef struct {
 
 	ID3D11ShaderResourceView* testTexture;
 
-	ID3D11ShaderResourceView* white_texture;	
+		
 
 
 } BackendRenderer;
@@ -460,11 +461,11 @@ static UINT backendRender_init(BackendRenderer *r, HWND hwnd) {
 	}
 
 	// r->testTexture = d3d_loadFromFileToGPU_array(d3d11Device, "..\\src\\testTexture.png", 3);
-	r->testTexture = d3d_loadFromFileToGPU(d3d11Device, "..\\src\\testTexture.png");
+	global_testTexture = r->testTexture = d3d_loadFromFileToGPU(d3d11Device, "..\\src\\testTexture.png");
 
 
-	if(!r->white_texture) {
-		r->white_texture = d3d_loadFromFileToGPU(d3d11Device, "..\\src\\white_texture.png");
+	if(!global_white_texture) {
+		global_white_texture = (void *)d3d_loadFromFileToGPU(d3d11Device, "..\\src\\white_texture.png");
 	}
 
 

@@ -39,9 +39,9 @@ VS_Output vs_main(VS_Input input)
 
     output.pos = mul(orthoMatrix, float4(pos, 1.0f));
 
-    //output.uv = input.uv;
-    output.uv.x = lerp(input.uv1.x, input.uv1.z, input.uv.x);
-    output.uv.y = lerp(input.uv1.y, input.uv1.w, input.uv.y);
+    output.uv = input.uv;
+    //output.uv.x = lerp(input.uv1.x, input.uv1.z, input.uv.x);
+    //output.uv.y = lerp(input.uv1.y, input.uv1.w, input.uv.y);
 
 
 

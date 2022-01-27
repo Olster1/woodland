@@ -104,16 +104,19 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 
 	u8 *str = compileBuffer_toNullTerminateString(b);
 
-	// OutputDebugStringA((LPCSTR)str);
+	OutputDebugStringA((LPCSTR)str);
+	OutputDebugStringA((LPCSTR)"\n");
 
 	pushViewport(renderer, make_float4(0, 0, 0, 0));
 	pushClearColor(renderer, make_float4(1, 0.5f, 0, 1)); 
 	pushShader(renderer, &sdfFontShader);
 
-	float2 scale = make_float2(100, 100);
+	
 
 	float16 orthoMatrix = make_ortho_matrix_top_left_corner(windowWidth, windowHeight, MATH_3D_NEAR_CLIP_PlANE, MATH_3D_FAR_CLIP_PlANE);
 	pushMatrix(renderer, orthoMatrix);
+
+	
 
 	float fontScale = 2.0f;
 
@@ -121,6 +124,9 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 	float yAt = 0;//-editorState->font.fontHeight*fontScale;
 
 	u8 *at = str;
+
+	float cursorX = 0;
+	float cursorY = 0;
 
 	//NOTE: Output the buffer
 	while(*at) {
@@ -146,6 +152,11 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 		if(rune == '\n' || rune == '\r') {
 			yAt -= editorState->font.fontHeight*fontScale;
 			xAt = 0;
+		} else if(rune == '|') {
+
+			cursorX = xAt;
+			cursorY = yAt;
+			
 		} else {
 			GlyphInfo g = easyFont_getGlyph(&editorState->font, rune);
 
@@ -162,13 +173,34 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 				pos.x = xAt + g.xoffset;
 				pos.y = yAt + g.yoffset;
 				pos.z = 1.0f;
-				// pushGlyph(renderer, NULL, make_float3(0.5f*windowWidth, 0.5f*windowHeight, 1.0f), scale, make_float4(1, 1, 1, 1), make_float4(0, 1, 0, 1));
-				pushGlyph(renderer, g.handle, pos, scale, color, g.uvCoords);
+				pushGlyph(renderer, global_testTexture, pos, scale, color, g.uvCoords);
 			}
 
 			xAt += g.width*fontScale;
 
 		}
+	}
+
+	// orthoMatrix = make_ortho_matrix_bottom_left_corner(windowWidth, windowHeight, MATH_3D_NEAR_CLIP_PlANE, MATH_3D_FAR_CLIP_PlANE);
+	// pushMatrix(renderer, orthoMatrix);
+
+	// float2 scale = make_float2(400, 400);
+	// GlyphInfo g = easyFont_getGlyph(&editorState->font, 'M');
+	// pushTexture(renderer, global_white_texture, make_float3(0.5f*windowWidth, 0.5f*windowHeight, 1.0f), scale, make_float4(1, 0, 1, 1), make_float4(0, 1, 0, 1));
+
+	// pushTexture(renderer, global_white_texture, make_float3(0.1f*windowWidth, 0.5f*windowHeight, 1.0f), scale, make_float4(1, 1, 0, 1), make_float4(0, 1, 0, 1));
+
+	// pushTexture(renderer, global_white_texture, make_float3(0.5f*windowWidth, 0.9f*windowHeight, 1.0f), scale, make_float4(0, 1, 1, 1), make_float4(0, 1, 0, 1));
+
+	{
+		pushShader(renderer, &textureShader);
+
+		//NOTE: Draw the cursor
+		float cursor_width = easyFont_getGlyph(&editorState->font, 'M').width;
+
+		float2 scale = make_float2(cursor_width*fontScale, editorState->font.fontHeight*fontScale);
+
+		pushTexture(renderer, global_white_texture, make_float3(cursorX, cursorY, 1.0f), scale, make_float4(0, 0, 1, 1), make_float4(0, 1, 0, 1));
 	}
 
 	Win32HeapFree(str);
