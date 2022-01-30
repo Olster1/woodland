@@ -1,3 +1,4 @@
+#include "color.cpp"
 #include "wl_buffer.cpp"
 #include "font.cpp"
 
@@ -37,6 +38,10 @@ typedef struct {
 
 	Font font;
 
+	Editor_Color_Palette color_palette;
+
+	float fontScale;
+
 } EditorState;
 
 
@@ -55,12 +60,26 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 
 		editorState->font = initFont("..\\fonts\\SpaceMono.ttf");
 
+		editorState->fontScale = 1.0f;
+
 		//NOTE: Set up the first buffer
 		WL_Window *w = &editorState->windows[0];
 		initBuffer(&w->buffer);
 		w->name = "untitled";
 		w->is_up_to_date = true;
 		w->bounds = make_rect2f(0, 0, windowWidth, windowHeight);
+
+
+		{
+			editorState->color_palette.background = color_hexARGBTo01(0xFF161616);
+			editorState->color_palette.standard =  color_hexARGBTo01(0xFFA08563);
+			// float4 variable;
+			// float4 bracket;
+			// float4 function;
+			// float4 keyword;
+			// float4 comment;
+			// float4 preprocessor;
+		}
 
 	}
 
@@ -69,9 +88,62 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 	//NOTE: Clear the renderer out so we can start again
 	clearRenderer(renderer);
 
+
+
+
+	//NOTE: Ctrl + -> zoom in -> change this to have the windows lag 
+	if(global_platformInput.keyStates[PLATFORM_KEY_LEFT_CTRL].isDown && global_platformInput.keyStates[PLATFORM_KEY_PLUS].isDown) 
+	{
+		editorState->fontScale += 0.25f;
+
+		if(editorState->fontScale > 5.0f) {
+			editorState->fontScale = 5.0f;
+		}
+	}
+
+
+	//NOTE: Ctrl - -> zoom out -> change this to have the windows lag 
+	if(global_platformInput.keyStates[PLATFORM_KEY_LEFT_CTRL].isDown && global_platformInput.keyStates[PLATFORM_KEY_MINUS].isDown) 
+	{
+		editorState->fontScale -= 0.25f;
+
+		if(editorState->fontScale < 0.5f) {
+			editorState->fontScale = 0.5f;
+		}
+	}
+
+
+	//NOTE: Ctrl + O -> open file 
+	if(global_platformInput.keyStates[PLATFORM_KEY_LEFT_CTRL].isDown && global_platformInput.keyStates[PLATFORM_KEY_O].pressedCount > 0) 
+	{	
+		//NOTE: Make sure free the string
+		char *fileNameToOpen = (char *)Platform_OpenFile_withDialog_wideChar_haveToFree();
+
+		size_t data_size = 0;
+		void *data = 0;
+		if(Platform_LoadEntireFile_wideChar(fileNameToOpen, &data, &data_size)) {
+			int i = 0;
+
+			// addTextToBuffer(b, (char *)data, b->cursorAt_inBytes);
+
+			Win32FreeFileData(data);
+
+		} else {
+			assert(!"Couldn't open file");
+		}
+
+		Win32HeapFree(fileNameToOpen);
+	}
+
+
+
+
+
+
+
 	pushViewport(renderer, make_float4(0, 0, 0, 0));
 	renderer_defaultScissors(renderer, windowWidth, windowHeight);
-	pushClearColor(renderer, make_float4(1, 0.5f, 0, 1)); 
+	pushClearColor(renderer, editorState->color_palette.background);
 
 	switch(editorState->mode) {
 		case MODE_EDIT_BUFFER: {	
@@ -126,7 +198,7 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 
 				
 
-				draw_wl_window(w, renderer, is_active, windowWidth, windowHeight, editorState->font);
+				draw_wl_window(w, renderer, is_active, windowWidth, windowHeight, editorState->font, editorState->color_palette.standard, editorState->fontScale);
 			}
 		} break;
 	}
@@ -134,43 +206,22 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 	
 	//////////////////////////////////////////////////////// 
 
-	if(global_platformInput.keyStates[PLATFORM_KEY_LEFT_CTRL].isDown) {
-		// OutputDebugStringA((char *)"Ctrl Down");
-	}
+	// if(global_platformInput.keyStates[PLATFORM_KEY_LEFT_CTRL].isDown) {
+	// 	// OutputDebugStringA((char *)"Ctrl Down");
+	// }
 
-	if(global_platformInput.keyStates[PLATFORM_KEY_O].pressedCount > 0) {
-		OutputDebugStringA((char *)"O Pressed\n");
-	}
+	// if(global_platformInput.keyStates[PLATFORM_KEY_O].pressedCount > 0) {
+	// 	OutputDebugStringA((char *)"O Pressed\n");
+	// }
 
-	if(global_platformInput.keyStates[PLATFORM_KEY_O].isDown) {
-		OutputDebugStringA((char *)"O down\n");
-	}
+	// if(global_platformInput.keyStates[PLATFORM_KEY_O].isDown) {
+	// 	OutputDebugStringA((char *)"O down\n");
+	// }
 
-	if(global_platformInput.keyStates[PLATFORM_KEY_O].releasedCount > 0) {
-		OutputDebugStringA((char *)"O released\n");
-	}
+	// if(global_platformInput.keyStates[PLATFORM_KEY_O].releasedCount > 0) {
+	// 	OutputDebugStringA((char *)"O released\n");
+	// }
 
-	//NOTE: Ctrl + O -> open file 
-	if(global_platformInput.keyStates[PLATFORM_KEY_LEFT_CTRL].isDown && global_platformInput.keyStates[PLATFORM_KEY_O].pressedCount > 0) 
-	{	
-		//NOTE: Make sure free the string
-		char *fileNameToOpen = (char *)Platform_OpenFile_withDialog_wideChar_haveToFree();
-
-		size_t data_size = 0;
-		void *data = 0;
-		if(Platform_LoadEntireFile_wideChar(fileNameToOpen, &data, &data_size)) {
-			int i = 0;
-
-			// addTextToBuffer(b, (char *)data, b->cursorAt_inBytes);
-
-			Win32FreeFileData(data);
-
-		} else {
-			assert(!"Couldn't open file");
-		}
-
-		Win32HeapFree(fileNameToOpen);
-	}
 
 
 	

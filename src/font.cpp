@@ -87,6 +87,7 @@ FontSheet *createFontSheet(Font *font, u32 firstChar, u32 endChar) {
     u32 totalHeight = 0;
 
     u32 counAt = 0;
+    u32 rowCount = 1;
    
     for(s32 codeIndex = firstChar; codeIndex < endChar; ++codeIndex) {
         
@@ -104,9 +105,11 @@ FontSheet *createFontSheet(Font *font, u32 firstChar, u32 endChar) {
 
         memset(info, 0, sizeof(GlyphInfo));
 
+        info->unicodePoint = codeIndex;
+
         if(data) {
 
-            info->unicodePoint = codeIndex;
+
 
             info->sdfBitmap = data;
 
@@ -122,7 +125,7 @@ FontSheet *createFontSheet(Font *font, u32 firstChar, u32 endChar) {
             info->height = height;
             // info->aspectRatio_h_over_w = height / width;
 
-            { //NOTE: Update the font sheet atlas
+            { 
                 totalWidth += width;
                 counAt++;
 
@@ -132,6 +135,7 @@ FontSheet *createFontSheet(Font *font, u32 firstChar, u32 endChar) {
             } 
 
             if((counAt % 16) == 0) {
+                rowCount++;
                 counAt = 0;
                 if(totalWidth > maxWidth) { maxWidth = totalWidth; }
                 totalWidth = 0;
@@ -141,16 +145,23 @@ FontSheet *createFontSheet(Font *font, u32 firstChar, u32 endChar) {
 
         
     totalWidth = maxWidth;
-    totalHeight = maxHeight*16;
+    totalHeight = maxHeight*rowCount;
     u32 *sdfBitmap_32 = (u32 *)Win32HeapAlloc(totalWidth*totalHeight*sizeof(u32), true);
 
     u32 xAt = 0;
     u32 yAt = 0;
 
+    u32 countAt = 0;
+
     for(int i = 0; i < sheet->glyphCount; ++i) {
         GlyphInfo *info = &sheet->glyphs[i];
 
         if(info->sdfBitmap) {
+
+            if(info->unicodePoint == 'w') {
+                int b = 0;
+            }
+            
 
             //NOTE: Calculate uv coords
             info->uvCoords = make_float4((float)xAt / (float)totalWidth, (float)yAt / (float)totalHeight, (float)(xAt + info->width) / (float)totalWidth, (float)(yAt + info->height) / (float)totalHeight);
@@ -167,10 +178,17 @@ FontSheet *createFontSheet(Font *font, u32 firstChar, u32 endChar) {
 
             xAt += info->width;
 
-            if((i % 16) == 0 && i != 0) {
+            
+            countAt++;
+
+            if((countAt % 16) == 0) {
                 yAt += maxHeight;
                 xAt = 0;
             }
+
+            assert(xAt < totalWidth);
+            assert(yAt < totalHeight);
+
 
             //NOTE(ollie): Free the bitmap data
             stbtt_FreeSDF(info->sdfBitmap, 0);

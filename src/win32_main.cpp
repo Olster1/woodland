@@ -46,6 +46,9 @@ enum PlatformKeyType {
     PLATFORM_KEY_LEFT_CTRL,
     PLATFORM_KEY_O,
 
+    PLATFORM_KEY_MINUS,
+    PLATFORM_KEY_PLUS,
+
     PLATFORM_KEY_BACKSPACE,
 
     PLATFORM_MOUSE_LEFT_BUTTON,
@@ -269,6 +272,10 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
             keyType = PLATFORM_KEY_X;
         } else if(vk_code == 'O') {
             keyType = PLATFORM_KEY_O;
+        } else if(vk_code == VK_OEM_MINUS) {
+            keyType = PLATFORM_KEY_MINUS;
+        } else if(vk_code == VK_OEM_PLUS) {
+            keyType = PLATFORM_KEY_PLUS;
         } else if(vk_code == VK_CONTROL) {
             keyType = PLATFORM_KEY_LEFT_CTRL;
         } else if(vk_code == VK_BACK) {
