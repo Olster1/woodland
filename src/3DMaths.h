@@ -33,13 +33,13 @@ static float3 make_float3(float x0, float y0, float z0) {
 }
 
 
-static float4 make_float4(float x0, float y0, float z0, float w0) {
+static float4 make_float4(float x, float y, float z, float w) {
 	float4 result = {};
 
-	result.x = x0;
-	result.y = y0;
-	result.z = z0;
-	result.w = w0;
+	result.x = x;
+	result.y = y;
+	result.z = z;
+	result.w = w;
 
 	return result;
 }

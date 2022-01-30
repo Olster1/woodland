@@ -4,9 +4,7 @@
 /*
 Next:
 
-1. windows have a dim
-2. sciccor command for the dim 
-
+1. Get glyphs to actually draw with the blend mode
 
 */
 
@@ -62,7 +60,7 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 		initBuffer(&w->buffer);
 		w->name = "untitled";
 		w->is_up_to_date = true;
-		w->bounds = make_rect2f(0, 0, windowHeight, windowWidth);
+		w->bounds = make_rect2f(0, 0, windowWidth, windowHeight);
 
 	}
 

@@ -39,11 +39,9 @@ VS_Output vs_main(VS_Input input)
 
     output.pos = mul(orthoMatrix, float4(pos, 1.0f));
 
-    output.uv = input.uv;
-    //output.uv.x = lerp(input.uv1.x, input.uv1.z, input.uv.x);
-    //output.uv.y = lerp(input.uv1.y, input.uv1.w, input.uv.y);
-
-
+    // output.uv = input.uv;
+    output.uv.x = lerp(input.uv1.x, input.uv1.z, input.uv.x);
+    output.uv.y = lerp(input.uv1.y, input.uv1.w, input.uv.y);
 
     output.color = input.color1;//float4(1, 0, 0, 0);
     output.texture_array_index = input.texture_array_index;
@@ -52,16 +50,18 @@ VS_Output vs_main(VS_Input input)
 
 float4 ps_main(VS_Output input) : SV_Target
 {
-    // float smoothing = 0.3f;
+    float smoothing = 0.1f;
+    float boldness = 0.3f;
     float4 sample = mytexture.Sample(mysampler, input.uv); 
 
-    // float alpha = result.w;
-    // alpha = smoothstep(0.5f, 0.5f + smoothing, alpha);
+    float distance = sample.a;
 
-    // float4 c = result;
-    // c.a = alpha;
-    // if(c.a <= 0.2f) discard;
+    float alpha = smoothstep(1.0f - boldness, (1.0f - boldness) + smoothing, distance);
 
-    return sample*input.color;
+    float4 color = alpha * input.color;
+
+    color.xyz /= color.a;
+
+    return color;
     
 }

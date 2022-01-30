@@ -567,10 +567,10 @@ static void backendRender_processCommandBuffer(Renderer *r, BackendRenderer *bac
 				d3d11DeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 				d3d11DeviceContext->IASetInputLayout(backend_r->glyph_inputLayout);
 
-				// float blendFactor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-				// UINT sampleMask   = 0xffffffff;
+				float blendFactor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+				UINT sampleMask   = 0xffffffff;
 
-				// d3d11DeviceContext->OMSetBlendState(backend_r->m_blendMode, blendFactor, sampleMask);
+				d3d11DeviceContext->OMSetBlendState(backend_r->m_blendMode, blendFactor, sampleMask);
 
 				// EditorState *editorState = (EditorState *)global_platform.permanent_storage;
 				

@@ -59,7 +59,7 @@ FontSheet *createFontSheet(Font *font, u32 firstChar, u32 endChar) {
     stbtt_InitFont(fontInfo, (const unsigned char *)contents, 0);
     
     //NOTE(ollie): Get the 'scale' for the max pixel height 
-    float maxHeightForFontInPixels = 8;//pixels
+    float maxHeightForFontInPixels = 32;//pixels
     float scale = stbtt_ScaleForPixelHeight(fontInfo, maxHeightForFontInPixels);
     
     //NOTE(ollie): Scale the padding around the glyph proportional to the size of the glyph
@@ -69,7 +69,7 @@ FontSheet *createFontSheet(Font *font, u32 firstChar, u32 endChar) {
     //NOTE(ollie): The rate at which the distance from the center should increase
     float pixel_dist_scale = (float)onedge_value/(float)padding;
 
-    font->fontHeight = maxHeightForFontInPixels + (2*padding);
+    font->fontHeight = maxHeightForFontInPixels;
     
     ///////////////////////************ Kerning Table *************////////////////////
     // //NOTE(ollie): Get the kerning table length i.e. number of entries
@@ -153,15 +153,15 @@ FontSheet *createFontSheet(Font *font, u32 firstChar, u32 endChar) {
         if(info->sdfBitmap) {
 
             //NOTE: Calculate uv coords
-            info->uvCoords = make_float4(xAt / totalWidth, yAt / totalHeight, (xAt + info->width) / totalWidth, (yAt + info->height) / totalHeight);
+            info->uvCoords = make_float4((float)xAt / (float)totalWidth, (float)yAt / (float)totalHeight, (float)(xAt + info->width) / (float)totalWidth, (float)(yAt + info->height) / (float)totalHeight);
 
             //NOTE(ollie): Blow out bitmap to 32bits per pixel instead of 8 so it's easier to load to the GPU
             for(int y = 0; y < info->height; ++y) {
                 for(int x = 0; x < info->width; ++x) {
-
-                    u8 alpha = info->sdfBitmap[y*info->width + x];
+                    u32 stride = info->width*1;
+                    u32 alpha = (u32)info->sdfBitmap[y*stride + x];
                     // sdfBitmap_32[(y + yAt)*totalWidth + (x + xAt)] = 0x00000000 | (u32)(((u32)alpha) << 24);
-                    sdfBitmap_32[(y + yAt)*totalWidth + (x + xAt)] = 0x00FFFFFF | (u32)(((u32)alpha) << 24);
+                    sdfBitmap_32[(y + yAt)*totalWidth + (x + xAt)] = 0x00000000 | (u32)((alpha) << 24);
                 }
             }
 
