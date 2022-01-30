@@ -44,6 +44,24 @@ static float4 make_float4(float x0, float y0, float z0, float w0) {
 	return result;
 }
 
+struct Rect2f {
+	float minX;
+	float minY;
+	float maxX;
+	float maxY;
+};
+
+static Rect2f make_rect2f(float minX, float minY, float maxX, float maxY) {
+	Rect2f result = {};
+
+	result.minX = minX;
+	result.minY = minY;
+	result.maxX = maxX;
+	result.maxY = maxY;
+
+	return result; 
+}
+
 struct float16
 {
     float E[16];

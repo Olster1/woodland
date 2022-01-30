@@ -443,6 +443,27 @@ static UINT backendRender_init(BackendRenderer *r, HWND hwnd) {
 		d3d11Device->CreateBlendState(&blendDesc, &r->m_blendMode);
 	}
 
+	//NOTE: Rasterizer state
+	{
+	   ID3D11RasterizerState1 *raster_state;
+
+	   D3D11_RASTERIZER_DESC1 rasterizerState;
+	   rasterizerState.FillMode = D3D11_FILL_SOLID;
+	   rasterizerState.CullMode = D3D11_CULL_FRONT;
+	   rasterizerState.FrontCounterClockwise = true;
+	   rasterizerState.DepthBias = false;
+	   rasterizerState.DepthBiasClamp = 0;
+	   rasterizerState.SlopeScaledDepthBias = 0;
+	   rasterizerState.DepthClipEnable = true;
+	   rasterizerState.ScissorEnable = true;
+	   rasterizerState.MultisampleEnable = false;
+	   rasterizerState.AntialiasedLineEnable = false;
+	   rasterizerState.ForcedSampleCount = 0;
+	   d3d11Device->CreateRasterizerState1( &rasterizerState, &raster_state );	
+
+	   d3d11DeviceContext->RSSetState(raster_state);
+	}
+
 	{
 		//NOTE: Create the constant buffer
 		{
@@ -517,6 +538,11 @@ static void backendRender_processCommandBuffer(Renderer *r, BackendRenderer *bac
 
 				d3d11DeviceContext->VSSetShader(program->vertexShader, nullptr, 0);
 				d3d11DeviceContext->PSSetShader(program->pixelShader, nullptr, 0);
+			} break;
+			case RENDER_SET_SCISSORS: {
+				D3D11_RECT rect = { (LONG)c->scissors_bounds.minX, (LONG)c->scissors_bounds.minY, (LONG)c->scissors_bounds.maxX, (LONG)c->scissors_bounds.maxY };
+
+				d3d11DeviceContext->RSSetScissorRects(1, &rect);
 			} break;
 			case RENDER_GLYPH: {
 

@@ -158,4 +158,3 @@ static u8 *compileBuffer_toNullTerminateString(WL_Buffer *b) {
 
 	return result;
 }
-

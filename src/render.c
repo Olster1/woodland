@@ -7,7 +7,8 @@ enum RenderCommandType {
 	RENDER_MATRIX,
 	RENDER_CLEAR_COLOR_BUFFER,
 	RENDER_SET_VIEWPORT,
-	RENDER_SET_SHADER
+	RENDER_SET_SHADER,
+	RENDER_SET_SCISSORS
 };
 
 #define MAX_TEXTURE_COUNT_PER_DRAW_BATCH 1
@@ -23,6 +24,8 @@ typedef struct {
 	float4 color; //NOTE: For the RENDER_CLEAR_COLOR_BUFFER
 	float4 viewport; //NOTE: For the RENDER_SET_VIEWPORT
 	void *shader; //NOTE: For the RENDER_SET_SHADER
+
+	Rect2f scissors_bounds; //NOTE: For RENDER_SET_SCISSORS 
 
 	int textureHandle_count;
 	void *texture_handles[MAX_TEXTURE_COUNT_PER_DRAW_BATCH]; //NOTE: Used to send to the shader
@@ -261,5 +264,16 @@ static void pushTexture(Renderer *r, void *textureHandle, float3 pos, float2 siz
 		c->instanceCount++;
 		c->size_in_bytes += SIZE_OF_TEXTURE_INSTANCE_IN_BYTES;
 	}
+}
+
+static void pushScissorsRect(Renderer *r, Rect2f scissors_bounds) {
+	RenderCommand *c = getRenderCommand(r, RENDER_SET_SCISSORS);
+
+	assert(c->type == RENDER_SET_SCISSORS);
+	c->scissors_bounds = scissors_bounds;
+}
+
+static void renderer_defaultScissors(Renderer *r, float windowWidth, float windowHeight) {
+	pushScissorsRect(r, make_rect2f(0, 0, windowWidth, windowHeight));
 }
 
