@@ -19,12 +19,11 @@
 #include <stdio.h>
 
 #define Megabytes(value) value*1000*1000
+#define Kilobytes(value) value*1000
 
 #define DEFAULT_WINDOW_WIDTH             1280
 #define DEFAULT_WINDOW_HEIGHT             720
 #define PERMANENT_STORAGE_SIZE  Megabytes(32)
-#define SCRATCH_STORAGE_SIZE    Megabytes(32)
-#define RENDERER_STORAGE_SIZE    Megabytes(32)
 
 #include "platform.h"
 
@@ -333,6 +332,13 @@ static void platform_free_memory(void *data)
     HeapFree(GetProcessHeap(), 0, data);
 
 }
+//NOTE: Used by the game layer
+static void *platform_alloc_memory(size_t size)
+{
+    //NOTE: According to the docs this just gets zeroed out
+    return VirtualAlloc(0, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE); 
+
+}
 
 
 
@@ -574,10 +580,8 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int
 
     //NOTE: Allocate stuff
     global_platform.permanent_storage_size = PERMANENT_STORAGE_SIZE;
-    global_platform.scratch_storage_size = SCRATCH_STORAGE_SIZE;
 
     global_platform.permanent_storage = VirtualAlloc(0, global_platform.permanent_storage_size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-    global_platform.scratch_storage = VirtualAlloc(0, global_platform.scratch_storage_size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
     /////////////////////
 
     // Timing

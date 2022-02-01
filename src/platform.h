@@ -30,6 +30,13 @@ typedef uint8_t u8;
 
 typedef intptr_t intprt;
 
+#if !defined arrayCount
+#define arrayCount(array1) (sizeof(array1) / sizeof(array1[0]))
+#endif 
+
+#define ENUM(value) value,
+#define STRING(value) #value,
+
 typedef struct {
 	size_t permanent_storage_size;
 	size_t scratch_storage_size;

@@ -24,8 +24,15 @@ static void draw_wl_window(WL_Window *w, Renderer *renderer, bool is_active, flo
 
 	bool newLine = true;
 
+	bool parsing = true;
+	EasyTokenizer tokenizer = lexBeginParsing(str, EASY_LEX_OPTION_EAT_WHITE_SPACE);
+
+
 	//NOTE: Output the buffer
 	while(*at) {
+
+	// while(parsing) {
+	// 	EasyToken token = lexGetNextToken(&tokenizer);
 
 #define UTF8_ADVANCE 1
 #if UTF8_ADVANCE
@@ -67,7 +74,7 @@ static void draw_wl_window(WL_Window *w, Renderer *renderer, bool is_active, flo
 			assert(g.unicodePoint == rune);
 
 			if(rune == ' ') {
-				g.width = easyFont_getGlyph(&font, 'M').width;
+				g.width = easyFont_getGlyph(&font, 'y').width;
 			}
 
 			if(g.hasTexture) {

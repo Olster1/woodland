@@ -1,15 +1,21 @@
+#include "memory_arena.cpp"
+#include "lex_utf8.h"
 #include "color.cpp"
 #include "wl_buffer.cpp"
 #include "font.cpp"
+#include "ui.cpp"
 
 /*
 Next:
 
-1. Get glyphs to actually draw with the blend mode
+1. Change to windows referencing buffer
+2. Convert lex.cpp to use runes instead of chars
+3. Create new windows and be able to resize them
 
 */
 
-#define MAX_WINDOW_COUNT 16
+#define MAX_WINDOW_COUNT 8
+#define MAX_BUFFER_COUNT 256 //TODO: Allow user to open unlimited buffers
 
 typedef enum {
 	MODE_EDIT_BUFFER,
@@ -21,7 +27,7 @@ typedef struct {
 
 	Rect2f bounds;
 
-	WL_Buffer buffer;
+	int buffer_index; //NOTE: index into all the active buffers 
 } WL_Window;
 
 #include "wl_window.cpp"
@@ -33,6 +39,8 @@ typedef struct {
 
 	u32 active_buffer_index;
 	WL_Window windows[MAX_WINDOW_COUNT];
+
+	WL_Buffer buffers_loaded[MAX_BUFFER_COUNT]; 
 
 	EditorMode mode;
 
@@ -50,6 +58,12 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 	EditorState *editorState = (EditorState *)global_platform.permanent_storage;
 	assert(sizeof(EditorState) < global_platform.permanent_storage_size);
 	if(!editorState->initialized) {
+
+		// longTermArena = initMemoryArena_withMemory(global_platform.permanent_storage, global_platform.permanent_storage_size - sizeof(EditorState));
+
+		globalPerFrameArena = initMemoryArena(Kilobytes(100));
+		global_perFrameArenaMark = takeMemoryMark(&globalPerFrameArena);
+
 		
 		editorState->initialized = true;
 
@@ -81,6 +95,9 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 			// float4 preprocessor;
 		}
 
+	} else {
+		releaseMemoryMark(&global_perFrameArenaMark);
+		global_perFrameArenaMark = takeMemoryMark(&globalPerFrameArena);
 	}
 
 	Renderer *renderer = &editorState->renderer;
