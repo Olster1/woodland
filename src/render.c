@@ -160,7 +160,7 @@ static int render_getTextureIndex(RenderCommand *c, void *textureHandle) {
 	int index = -1;//NOTE: -1 for unitialized
 
 	//NOTE: Check if it's in the array
-	for(int i = 0; i < c->textureHandle_count && i < 0; ++i) {
+	for(int i = 0; i < c->textureHandle_count && index < 0; ++i) {
 		void *handle = c->texture_handles[i];
 
 		if(handle == textureHandle) {

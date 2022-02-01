@@ -37,17 +37,17 @@ static void draw_wl_window(WL_Window *w, Renderer *renderer, bool is_active, flo
 #endif
 
 		//NOTE: DEBUG PURPOSES
-		GlyphInfo g = easyFont_getGlyph(&font, rune);
-		char string[256];
-        sprintf(string, "%c: %d\n", rune, g.hasTexture);
+		// GlyphInfo g = easyFont_getGlyph(&font, rune);
+		// char string[256];
+  //       sprintf(string, "%c: %d\n", rune, g.hasTexture);
 
-        OutputDebugStringA((char *)string);
+  //       OutputDebugStringA((char *)string);
 
 		
 		float factor = 1.0f;
 
 		if(rune == '\n' || rune == '\r') {
-			yAt -= font.fontHeight*fontScale;
+			yAt -= 0.8f*font.fontHeight*fontScale;
 			xAt = 0;
 			newLine = true;
 		} else if(rune == '|') {
@@ -77,14 +77,14 @@ static void draw_wl_window(WL_Window *w, Renderer *renderer, bool is_active, flo
 				float2 scale = make_float2(g.width*fontScale, g.height*fontScale);
 
 				if(newLine) {
-					xAt = 0.5f*scale.x;
+					xAt = 0.6f*scale.x;
 				}
 
 				float offsetY = -0.5f*scale.y;
 
 				float3 pos = {};
 				pos.x = xAt + fontScale*g.xoffset;
-				pos.y = yAt + -fontScale*g.yoffset	 + offsetY;
+				pos.y = yAt + -fontScale*g.yoffset + offsetY;
 				pos.z = 1.0f;
 				pushGlyph(renderer, g.handle, pos, scale, font_color, g.uvCoords);
 			}

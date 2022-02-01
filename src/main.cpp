@@ -92,7 +92,7 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 
 
 	//NOTE: Ctrl + -> zoom in -> change this to have the windows lag 
-	if(global_platformInput.keyStates[PLATFORM_KEY_LEFT_CTRL].isDown && global_platformInput.keyStates[PLATFORM_KEY_PLUS].isDown) 
+	if(global_platformInput.keyStates[PLATFORM_KEY_LEFT_CTRL].isDown && global_platformInput.keyStates[PLATFORM_KEY_PLUS].pressedCount > 0) 
 	{
 		editorState->fontScale += 0.25f;
 
@@ -103,7 +103,7 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 
 
 	//NOTE: Ctrl - -> zoom out -> change this to have the windows lag 
-	if(global_platformInput.keyStates[PLATFORM_KEY_LEFT_CTRL].isDown && global_platformInput.keyStates[PLATFORM_KEY_MINUS].isDown) 
+	if(global_platformInput.keyStates[PLATFORM_KEY_LEFT_CTRL].isDown && global_platformInput.keyStates[PLATFORM_KEY_MINUS].pressedCount > 0) 
 	{
 		editorState->fontScale -= 0.25f;
 
@@ -123,7 +123,7 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 		void *data = 0;
 		if(Platform_LoadEntireFile_wideChar(fileNameToOpen, &data, &data_size)) {
 			int i = 0;
-
+			
 			// addTextToBuffer(b, (char *)data, b->cursorAt_inBytes);
 
 			Win32FreeFileData(data);

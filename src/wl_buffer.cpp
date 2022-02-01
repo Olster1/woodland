@@ -35,6 +35,14 @@ static void initBuffer(WL_Buffer *b) {
 	memset(b, 0, sizeof(WL_Buffer));
 }
 
+static void wl_emptyBuffer(WL_Buffer *b) {
+
+	platform_free_memory(b->bufferMemory);
+
+	memset(b, 0, sizeof(WL_Buffer));
+
+}
+
 static void makeGapBuffer_(WL_Buffer *b, int byteStart, int gapSize) {
 
 	if(!b->bufferMemory) {

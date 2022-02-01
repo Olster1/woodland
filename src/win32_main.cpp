@@ -327,6 +327,13 @@ Win32HeapFree(void *data)
     HeapFree(GetProcessHeap(), 0, data);
 }
 
+//NOTE: Used by the game layer
+static void platform_free_memory(void *data)
+{
+    HeapFree(GetProcessHeap(), 0, data);
+
+}
+
 
 
 static u8 *platform_realloc_memory(void *src, u32 bytesToMove, size_t sizeToAlloc) {
