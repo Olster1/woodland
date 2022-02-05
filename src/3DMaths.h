@@ -62,6 +62,24 @@ static Rect2f make_rect2f(float minX, float minY, float maxX, float maxY) {
 	return result; 
 }
 
+static float2 get_centre_rect2f(Rect2f r) {
+	float2 result = {};
+
+	result.x = 0.5f*(r.maxX - r.minX) + r.minX;
+	result.y = 0.5f*(r.maxY - r.minY) + r.minY;
+
+	return result;
+}
+
+static float2 get_scale_rect2f(Rect2f r) {
+	float2 result = {};
+
+	result.x = (r.maxX - r.minX);
+	result.y = (r.maxY - r.minY);
+
+	return result;
+}
+
 struct float16
 {
     float E[16];

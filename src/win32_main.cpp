@@ -27,6 +27,10 @@
 
 #include "platform.h"
 
+#include "debug_stats.h"
+
+static DEBUG_stats global_debug_stats = {};
+
 
 static PlatformLayer global_platform;
 static HWND global_wndHandle;
@@ -41,6 +45,8 @@ enum PlatformKeyType {
     PLATFORM_KEY_LEFT,
     PLATFORM_KEY_X,
     PLATFORM_KEY_Z,
+
+    PLATFORM_KEY_F5,
 
     PLATFORM_KEY_LEFT_CTRL,
     PLATFORM_KEY_O,
@@ -267,6 +273,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
             addToCommandBuffer = keyIsDown;
         } else if(vk_code == 'Z') {
             keyType = PLATFORM_KEY_Z;
+        } else if(vk_code == VK_F5) {
+            keyType = PLATFORM_KEY_F5;
         } else if(vk_code == 'X') {
             keyType = PLATFORM_KEY_X;
         } else if(vk_code == 'O') {
@@ -308,46 +316,53 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
     return result;
 } 
 
+
+//TODO:  From docs: Because the system cannot compact a private heap, it can become fragmented.
+//TODO:  This means we don't want to use heap alloc, we would rather use a memory arena
 static void *
-Win32HeapAlloc(size_t size, bool zeroOut)
+platform_alloc_memory(size_t size, bool zeroOut)
 {
+
     void *result = HeapAlloc(GetProcessHeap(), 0, size);
 
     if(zeroOut) {
         memset(result, 0, size);
     }
 
-    return result;
-}
+    #if DEBUG_BUILD
+        DEBUG_add_memory_block_size(&global_debug_stats, result, size);
+    #endif
 
-static void
-Win32HeapFree(void *data)
-{
-    HeapFree(GetProcessHeap(), 0, data);
+    return result;
 }
 
 //NOTE: Used by the game layer
 static void platform_free_memory(void *data)
 {
+#if DEBUG_BUILD
+    DEUBG_remove_memory_block_size(&global_debug_stats, data);
+#endif
+
     HeapFree(GetProcessHeap(), 0, data);
 
 }
 //NOTE: Used by the game layer
-static void *platform_alloc_memory(size_t size)
+static void *platform_alloc_memory_pages(size_t size)
 {
+#if DEBUG_BUILD
+    global_debug_stats.total_virtual_alloc += size;
+#endif
     //NOTE: According to the docs this just gets zeroed out
     return VirtualAlloc(0, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE); 
 
 }
 
-
-
 static u8 *platform_realloc_memory(void *src, u32 bytesToMove, size_t sizeToAlloc) {
-    u8 *result = (u8 *)Win32HeapAlloc(sizeToAlloc, true);
+    u8 *result = (u8 *)platform_alloc_memory(sizeToAlloc, true);
 
     memmove(result, src, bytesToMove);
 
-    Win32HeapFree(src);
+    platform_free_memory(src);
 
     return result;
 
@@ -359,7 +374,7 @@ static void *Platform_OpenFile_withDialog_wideChar_haveToFree() {
     config.hwndOwner = global_wndHandle; // Put the owner window handle here.
     config.lpstrFilter = L"\0\0"; // Put the file extension here.
 
-    wchar_t *path = (wchar_t *)Win32HeapAlloc(MAX_PATH*sizeof(wchar_t), true);
+    wchar_t *path = (wchar_t *)platform_alloc_memory(MAX_PATH*sizeof(wchar_t), true);
     path[0] = 0;
     
     config.lpstrFile = path;
@@ -373,6 +388,39 @@ static void *Platform_OpenFile_withDialog_wideChar_haveToFree() {
     } 
 
     return path;
+}
+
+static void *platform_wide_char_to_utf8_allocates_on_heap(void *win32_wideString_utf16) {
+
+    u8 *result = 0;
+
+    int bufferSize_inBytes = WideCharToMultiByte(
+      CP_UTF8,
+      0,
+      (LPCWCH)win32_wideString_utf16,
+      -1,
+      (LPSTR)result, 
+      0,
+      0, 
+      0
+    );
+
+
+    result = (u8 *)platform_alloc_memory(bufferSize_inBytes, false);
+
+    u32 bytesWritten = WideCharToMultiByte(
+      CP_UTF8,
+      0,
+      (LPCWCH)win32_wideString_utf16,
+      -1,
+      (LPSTR)result, 
+      bufferSize_inBytes,
+      0, 
+      0
+    );
+
+
+    return result;
 }
 
 
@@ -427,7 +475,7 @@ static bool Platform_LoadEntireFile_wideChar(void *filename_wideChar_, void **da
             DWORD read_bytes = GetFileSize(file, 0);
             if(read_bytes)
             {
-                void *read_data = Win32HeapAlloc(read_bytes+1, false);
+                void *read_data = platform_alloc_memory(read_bytes+1, false);
                 DWORD bytes_read = 0;
                 OVERLAPPED overlapped = {0};
                 
@@ -480,7 +528,7 @@ static bool Platform_LoadEntireFile_utf8(char *filename_utf8, void **data, size_
 
         u32 sizeInBytes = (characterCount + 1)*sizeof(u16); //NOTE: Plus one for null terminator
 
-        filename_wideChar = (LPWSTR)Win32HeapAlloc(sizeInBytes, false);
+        filename_wideChar = (LPWSTR)platform_alloc_memory(sizeInBytes, false);
 
         int sizeCheck = MultiByteToWideChar(CP_UTF8, 0, filename_utf8, -1, filename_wideChar, characterCount);
 
@@ -490,7 +538,7 @@ static bool Platform_LoadEntireFile_utf8(char *filename_utf8, void **data, size_
 
     bool result = Platform_LoadEntireFile_wideChar(filename_wideChar, data, data_size);
 
-    Win32HeapFree(filename_wideChar);
+    platform_free_memory(filename_wideChar);
 
     return result;
 
@@ -499,7 +547,7 @@ static bool Platform_LoadEntireFile_utf8(char *filename_utf8, void **data, size_
 static void
 Win32FreeFileData(void *data)
 {
-    Win32HeapFree(data);
+    platform_free_memory(data);
 }
 
 
@@ -558,7 +606,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int
 
 
     //TODO: Change to using memory arena? 
-    BackendRenderer *backendRenderer = (BackendRenderer *)Win32HeapAlloc(sizeof(BackendRenderer), true); 
+    BackendRenderer *backendRenderer = (BackendRenderer *)platform_alloc_memory(sizeof(BackendRenderer), true); 
     backendRender_init(backendRenderer, hwnd);
 
     global_platformInput.dpi_for_window = GetDpiForWindow(hwnd);
@@ -582,6 +630,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int
     global_platform.permanent_storage_size = PERMANENT_STORAGE_SIZE;
 
     global_platform.permanent_storage = VirtualAlloc(0, global_platform.permanent_storage_size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+   
     /////////////////////
 
     // Timing

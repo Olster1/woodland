@@ -42,7 +42,8 @@ typedef struct {
 
 FontSheet *createFontSheet(Font *font, u32 firstChar, u32 endChar) {
 
-    FontSheet *sheet = (FontSheet *)Win32HeapAlloc(sizeof(FontSheet), true);
+    //NOTE: This could go in permanent memory arena
+    FontSheet *sheet = (FontSheet *)platform_alloc_memory(sizeof(FontSheet), true);
     sheet->minText = firstChar;
     sheet->maxText = endChar;
     sheet->next = 0;
@@ -53,7 +54,7 @@ FontSheet *createFontSheet(Font *font, u32 firstChar, u32 endChar) {
     Platform_LoadEntireFile_utf8(font->fileName, &contents, &contentsSize);
 
     //NOTE(ollie): This stores all the info about the font
-    stbtt_fontinfo *fontInfo = (stbtt_fontinfo *)Win32HeapAlloc(sizeof(stbtt_fontinfo), true);
+    stbtt_fontinfo *fontInfo = (stbtt_fontinfo *)platform_alloc_memory(sizeof(stbtt_fontinfo), true);
     
     //NOTE(ollie): Fill out the font info
     stbtt_InitFont(fontInfo, (const unsigned char *)contents, 0);
@@ -107,15 +108,13 @@ FontSheet *createFontSheet(Font *font, u32 firstChar, u32 endChar) {
 
         info->unicodePoint = codeIndex;
 
-        if(data) {
-
-
+        
 
             info->sdfBitmap = data;
 
             info->xoffset = xoffset;
             info->yoffset = yoffset;
-            info->hasTexture = true;
+            info->hasTexture = data;
 
             // char string[256];
             // sprintf(string, "%c: %d\n", codeIndex, info->hasTexture);
@@ -124,7 +123,7 @@ FontSheet *createFontSheet(Font *font, u32 firstChar, u32 endChar) {
             info->width = width;
             info->height = height;
             // info->aspectRatio_h_over_w = height / width;
-
+        if(data) {
             { 
                 totalWidth += width;
                 counAt++;
@@ -146,7 +145,7 @@ FontSheet *createFontSheet(Font *font, u32 firstChar, u32 endChar) {
         
     totalWidth = maxWidth;
     totalHeight = maxHeight*rowCount;
-    u32 *sdfBitmap_32 = (u32 *)Win32HeapAlloc(totalWidth*totalHeight*sizeof(u32), true);
+    u32 *sdfBitmap_32 = (u32 *)platform_alloc_memory(totalWidth*totalHeight*sizeof(u32), true);
 
     u32 xAt = 0;
     u32 yAt = 0;
@@ -206,8 +205,9 @@ FontSheet *createFontSheet(Font *font, u32 firstChar, u32 endChar) {
     sheet->handle = Platform_loadTextureToGPU(sdfBitmap_32, totalWidth, totalHeight, 4);
 
     //NOTE(ollie): Release memory from 32bit bitmap
-    Win32HeapFree(sdfBitmap_32);
-    Win32HeapFree(contents);
+    platform_free_memory(sdfBitmap_32);
+    platform_free_memory(contents);
+    platform_free_memory(fontInfo);
 
     return sheet;
 }
@@ -268,4 +268,53 @@ static inline GlyphInfo easyFont_getGlyph(Font *font, u32 unicodePoint) {
 
     }
     return glyph;
+}
+
+
+static void draw_text(Renderer *renderer, Font *font, char *str, float startX, float yAt_, float fontScale, float4 font_color) {
+    float yAt = -0.5f*font->fontHeight*fontScale + yAt_;
+
+    bool newLine = true;
+
+    float xAt = startX;
+
+    char *at = str;
+
+    while(*at) {
+
+        u32 rune = easyUnicode_utf8_codepoint_To_Utf32_codepoint(&((char *)at), true);
+
+        float factor = 1.0f;
+
+        GlyphInfo g = easyFont_getGlyph(font, rune);
+
+        assert(g.unicodePoint == rune);
+
+        if(rune == ' ') {
+            g.width = easyFont_getGlyph(font, 'y').width;
+        }
+
+        if(g.hasTexture) {
+
+
+            float4 color = font_color;//make_float4(0, 0, 0, 1);
+            float2 scale = make_float2(g.width*fontScale, g.height*fontScale);
+
+            if(newLine) {
+                xAt = 0.6f*scale.x + startX;
+            }
+
+            float offsetY = -0.5f*scale.y;
+
+            float3 pos = {};
+            pos.x = xAt + fontScale*g.xoffset;
+            pos.y = yAt + -fontScale*g.yoffset + offsetY;
+            pos.z = 1.0f;
+            pushGlyph(renderer, g.handle, pos, scale, font_color, g.uvCoords);
+        }
+
+        xAt += (g.width + g.xoffset)*fontScale*factor;
+
+        newLine = false;
+    }
 }

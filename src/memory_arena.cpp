@@ -23,6 +23,19 @@ typedef struct {
 
 } Memory_Arena;
 
+
+static size_t DEBUG_get_total_arena_size(Memory_Arena *arena) {
+    MemoryPiece *p = arena->pieces;
+    
+    size_t result = 0;
+    while(p) {
+        result += p->totalSize;
+
+        p = p->next;
+    }
+    return result;
+}
+
 #define pushStruct(arena, type) (type *)pushSize(arena, sizeof(type))
 
 #define pushArray(arena, size, type) (type *)pushSize(arena, sizeof(type)*size)
@@ -50,8 +63,9 @@ void *pushSize(Memory_Arena *arena, size_t size) {
         if(!piece) {//need to allocate a new piece
 
             //TODO: Change this to virtual alloc page sizes and put the 'MemoryPiece' as a header to the virtual alloc block
-            piece = (MemoryPiece *)platform_alloc_memory(sizeof(MemoryPiece));
-            piece->memory = platform_alloc_memory(extension);
+            u8 *memory_u8 = (u8 *)platform_alloc_memory_pages(extension + sizeof(MemoryPiece));
+            piece = (MemoryPiece *)memory_u8;
+            piece->memory = memory_u8 + sizeof(MemoryPiece);
             piece->totalSize = extension;
             piece->currentSize = 0;
         }

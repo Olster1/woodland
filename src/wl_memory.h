@@ -20,7 +20,7 @@ static void *easyPlatform_allocateMemory(u32 sizeInBytes, EasyPlatform_MemoryFla
     }
     
     if(flags & EASY_PLATFORM_MEMORY_ZERO) {
-        // easyMemory_zeroSize(result, sizeInBytes);
+        memset(result, 0, sizeInBytes);
     }
     
     return result;

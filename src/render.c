@@ -1,4 +1,4 @@
-
+static void* global_white_texture;
 
 enum RenderCommandType { 
 	RENDER_NULL,
@@ -275,5 +275,9 @@ static void pushScissorsRect(Renderer *r, Rect2f scissors_bounds) {
 
 static void renderer_defaultScissors(Renderer *r, float windowWidth, float windowHeight) {
 	pushScissorsRect(r, make_rect2f(0, 0, windowWidth, windowHeight));
+}
+
+static void pushRectOutline(Renderer *r, float3 pos, float2 size, float4 color) {
+	pushTexture(r, global_white_texture, pos, size, color, make_float4(0, 0, 1, 1));
 }
 

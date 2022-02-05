@@ -1,5 +1,4 @@
 static ID3D11Buffer* global_vertexBuffer_quad;
-static void* global_white_texture;
 static void* global_testTexture;
 
 typedef struct {
@@ -14,6 +13,7 @@ typedef struct {
 
 d3d_shader_program sdfFontShader;
 d3d_shader_program textureShader;
+d3d_shader_program rectOutlineShader;
 
 
 //NOTE: Example of 16byte aligned struct 
@@ -225,7 +225,6 @@ static void d3d_release_and_resize_default_frame_buffer(BackendRenderer *backend
 
 static UINT backendRender_init(BackendRenderer *r, HWND hwnd) {
 
-#define DEBUG_BUILD 1
 	r->window_hwnd = hwnd;
 	// Create D3D11 Device and Context
 	{
@@ -332,6 +331,8 @@ static UINT backendRender_init(BackendRenderer *r, HWND hwnd) {
 
 	d3d_createShaderProgram_vs_ps(d3d11Device, L"..\\src\\sdf_font.hlsl", L"..\\src\\sdf_font.hlsl", &sdfFontShader);
 	d3d_createShaderProgram_vs_ps(d3d11Device, L"..\\src\\texture.hlsl", L"..\\src\\texture.hlsl", &textureShader);
+	d3d_createShaderProgram_vs_ps(d3d11Device, L"..\\src\\rect_outline.hlsl", L"..\\src\\rect_outline.hlsl", &rectOutlineShader);
+	
 	
 	}
 		
@@ -441,6 +442,11 @@ static UINT backendRender_init(BackendRenderer *r, HWND hwnd) {
 		blendDesc.RenderTarget[0] = rtbd;
 
 		d3d11Device->CreateBlendState(&blendDesc, &r->m_blendMode);
+
+		float blendFactor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+		UINT sampleMask   = 0xffffffff;
+
+		d3d11DeviceContext->OMSetBlendState(r->m_blendMode, blendFactor, sampleMask);
 	}
 
 	//NOTE: Rasterizer state
@@ -511,6 +517,11 @@ static void backendRender_processCommandBuffer(Renderer *r, BackendRenderer *bac
 
 	ID3D11DeviceContext *d3d11DeviceContext = backend_r->d3d11DeviceContext;
 
+#if DEBUG_BUILD
+	global_debug_stats.draw_call_count = 0;
+    global_debug_stats.render_command_count = r->commandCount;
+#endif
+
 	for(int i = 0; i < r->commandCount; ++i) {
 		RenderCommand *c = r->commands + i;
 
@@ -567,10 +578,7 @@ static void backendRender_processCommandBuffer(Renderer *r, BackendRenderer *bac
 				d3d11DeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 				d3d11DeviceContext->IASetInputLayout(backend_r->glyph_inputLayout);
 
-				float blendFactor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-				UINT sampleMask   = 0xffffffff;
-
-				d3d11DeviceContext->OMSetBlendState(backend_r->m_blendMode, blendFactor, sampleMask);
+				
 
 				// EditorState *editorState = (EditorState *)global_platform.permanent_storage;
 				
@@ -600,6 +608,11 @@ static void backendRender_processCommandBuffer(Renderer *r, BackendRenderer *bac
 				d3d11DeviceContext->IASetVertexBuffers(0, 2, vertex_buffers, buffer_strides, offsets);
 
 				d3d11DeviceContext->DrawInstanced(backend_r->quad_numVerts, c->instanceCount, 0, 0);
+
+
+				#if DEBUG_BUILD
+				    global_debug_stats.draw_call_count++;
+				#endif
 
 			} break;
 			case RENDER_TEXTURE: {
@@ -658,6 +671,13 @@ static void backendRender_processCommandBuffer(Renderer *r, BackendRenderer *bac
 				d3d11DeviceContext->IASetVertexBuffers(0, 2, vertex_buffers, buffer_strides, offsets);
 
 				d3d11DeviceContext->DrawInstanced(backend_r->quad_numVerts, c->instanceCount, 0, 0);
+
+
+				#if DEBUG_BUILD
+				    global_debug_stats.draw_call_count++;
+				#endif
+
+
 
 			} break;
 			default: {

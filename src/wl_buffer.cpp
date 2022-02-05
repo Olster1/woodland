@@ -46,7 +46,7 @@ static void wl_emptyBuffer(WL_Buffer *b) {
 static void makeGapBuffer_(WL_Buffer *b, int byteStart, int gapSize) {
 
 	if(!b->bufferMemory) {
-		b->bufferMemory = (u8 *)Win32HeapAlloc(gapSize, true);
+		b->bufferMemory = (u8 *)platform_alloc_memory(gapSize, true);
 		b->bufferSize_inBytes = gapSize;
 	}
 
@@ -137,9 +137,11 @@ static void removeTextFromBuffer(WL_Buffer *b, int bytesStart, int toRemoveCount
 	}
 }
 
+#define WRITE_GAP_BUFFER_AS_HASH 0
+
 static u8 *compileBuffer_toNullTerminateString(WL_Buffer *b) {
 	bool wroteCursor = false;
-	u8 *result = (u8 *)Win32HeapAlloc(b->bufferSize_inBytes + 2, true); //NOTE: For null terminator and cursor spot
+	u8 *result = (u8 *)platform_alloc_memory(b->bufferSize_inBytes + 2, true); //NOTE: For null terminator and cursor spot
 	int at = 0;
 
 	for(int i = 0; i < b->bufferSize_inUse_inBytes; i++) {
@@ -149,13 +151,18 @@ static u8 *compileBuffer_toNullTerminateString(WL_Buffer *b) {
 			wroteCursor = true;
 		}
 
+#if WRITE_GAP_BUFFER_AS_HASH
 		if(i >= b->gapBuffer_startAt && i < b->gapBuffer_endAt) {
 			//NOTE: In Gap Buffer
 			result[at++] = '#';
 		} else {
 			result[at++] = b->bufferMemory[i];
 		}
+#else 
+			result[at++] = b->bufferMemory[i];
+#endif
 	}
+
 
 	if(!wroteCursor) {
 		result[b->bufferSize_inUse_inBytes] = '|';
