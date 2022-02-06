@@ -1,4 +1,3 @@
-#include "memory_arena.cpp"
 #include "wl_memory.h"
 #include "file_helper.cpp"
 #include "lex_utf8.h"
@@ -119,6 +118,27 @@ static WL_Window *open_new_window(EditorState *editorState) {
 	
 }
 
+static void open_file_and_add_to_new_window(EditorState *editorState, char *file_name_wide_char) {
+	size_t data_size = 0;
+	void *data = 0;
+	if(Platform_LoadEntireFile_wideChar(file_name_wide_char, &data, &data_size)) {
+
+		WL_Window *w = open_new_window(editorState);
+		WL_Buffer *b = &editorState->buffers_loaded[w->buffer_index];
+
+		addTextToBuffer(b, (char *)data, b->cursorAt_inBytes);
+
+		w->file_name_utf8 = (char *)platform_wide_char_to_utf8_allocates_on_heap(file_name_wide_char);
+		w->name = getFileLastPortion(w->file_name_utf8);
+		w->is_up_to_date = true;
+
+		Win32FreeFileData(data);
+
+	} else {
+		// assert(!"Couldn't open file");
+	}
+}
+
 
 static void DEBUG_draw_stats(Renderer *renderer, Font *font, float windowWidth, float windowHeight) {
 
@@ -194,6 +214,8 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 			// float4 preprocessor;
 		}
 
+		platform_copy_text_utf8_to_clipboard("This is text from Woodland.exe");
+
 	} else {
 		releaseMemoryMark(&global_perFrameArenaMark);
 		global_perFrameArenaMark = takeMemoryMark(&globalPerFrameArena);
@@ -204,17 +226,21 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 	//NOTE: Clear the renderer out so we can start again
 	clearRenderer(renderer);
 
-
-
-
 	/////////KEYBOARD COMMANDS BELOW /////////////
+
+	if(global_platformInput.drop_file_name_wide_char_need_to_free != 0) {
+		open_file_and_add_to_new_window(editorState, global_platformInput.drop_file_name_wide_char_need_to_free);
+
+		platform_free_memory(global_platformInput.drop_file_name_wide_char_need_to_free);
+		global_platformInput.drop_file_name_wide_char_need_to_free = 0;
+	}
 
 	if(global_platformInput.keyStates[PLATFORM_KEY_F5].pressedCount > 0) {
 		editorState->draw_debug_memory_stats = !editorState->draw_debug_memory_stats;
 	}
 
 
-	//NOTE: Ctrl Z -> toggle window
+	//NOTE: Ctrl Z -> toggle active window
 	if(global_platformInput.keyStates[PLATFORM_KEY_LEFT_CTRL].isDown && global_platformInput.keyStates[PLATFORM_KEY_Z].pressedCount > 0) 
 	{
 		editorState->active_window_index++;
@@ -261,25 +287,7 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 		//NOTE: Make sure free the string
 		char *fileNameToOpen = (char *)Platform_OpenFile_withDialog_wideChar_haveToFree();
 
-		size_t data_size = 0;
-		void *data = 0;
-		if(Platform_LoadEntireFile_wideChar(fileNameToOpen, &data, &data_size)) {
-			int i = 0;
-
-			WL_Window *w = open_new_window(editorState);
-			WL_Buffer *b = &editorState->buffers_loaded[w->buffer_index];
-
-			addTextToBuffer(b, (char *)data, b->cursorAt_inBytes);
-
-			w->file_name_utf8 = (char *)platform_wide_char_to_utf8_allocates_on_heap(fileNameToOpen);
-			w->name = getFileLastPortion(w->file_name_utf8);
-			w->is_up_to_date = true;
-
-			Win32FreeFileData(data);
-
-		} else {
-			// assert(!"Couldn't open file");
-		}
+		open_file_and_add_to_new_window(editorState, fileNameToOpen);
 
 		platform_free_memory(fileNameToOpen);
 	}
@@ -316,6 +324,17 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 
 					if(easyString_getSizeInBytes_utf8((char *)global_platformInput.textInput_utf8) > 0) {
 						w->is_up_to_date = false;
+					}
+
+					//NOTE: Ctrl P -> paste text from clipboard
+					if(global_platformInput.keyStates[PLATFORM_KEY_LEFT_CTRL].isDown && global_platformInput.keyStates[PLATFORM_KEY_P].pressedCount > 0) 
+					{
+						char *text_from_clipboard = platform_get_text_utf8_from_clipboard(&globalPerFrameArena);
+						w->is_up_to_date = false;
+
+						//NOTE: Any text added
+						addTextToBuffer(b, (char *)text_from_clipboard, b->cursorAt_inBytes);
+
 					}
 
 					//NOTE: Any text added

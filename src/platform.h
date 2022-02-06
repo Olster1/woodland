@@ -46,3 +46,65 @@ typedef struct {
 } PlatformLayer; 
 
 
+
+enum PlatformKeyType {
+    PLATFORM_KEY_NULL,
+    PLATFORM_KEY_UP,
+    PLATFORM_KEY_DOWN,
+    PLATFORM_KEY_RIGHT,
+    PLATFORM_KEY_LEFT,
+    PLATFORM_KEY_X,
+    PLATFORM_KEY_Z,
+    PLATFORM_KEY_P,
+
+    PLATFORM_KEY_F5,
+
+    PLATFORM_KEY_LEFT_CTRL,
+    PLATFORM_KEY_O,
+
+    PLATFORM_KEY_MINUS,
+    PLATFORM_KEY_PLUS,
+
+    PLATFORM_KEY_BACKSPACE,
+
+    PLATFORM_MOUSE_LEFT_BUTTON,
+    PLATFORM_MOUSE_RIGHT_BUTTON,
+    
+    // NOTE: Everything before here
+    PLATFORM_KEY_TOTAL_COUNT
+};
+
+struct PlatformKeyState {
+    bool isDown;
+    int pressedCount;
+    int releasedCount;
+};
+
+#define PLATFORM_MAX_TEXT_BUFFER_SIZE_IN_BYTES 256
+#define PLATFORM_MAX_KEY_INPUT_BUFFER 16
+
+struct PlatformInputState {
+
+    PlatformKeyState keyStates[PLATFORM_KEY_TOTAL_COUNT]; 
+
+    //NOTE: Mouse data
+    float mouseX;
+    float mouseY;
+    float mouseScrollX;
+    float mouseScrollY;
+
+    //NOTE: Text Input
+    uint8_t textInput_utf8[PLATFORM_MAX_TEXT_BUFFER_SIZE_IN_BYTES];
+    int textInput_bytesUsed;
+
+    PlatformKeyType keyInputCommandBuffer[PLATFORM_MAX_KEY_INPUT_BUFFER];
+    int keyInputCommand_count;
+
+    WCHAR low_surrogate;
+
+    UINT dpi_for_window;
+
+    char *drop_file_name_wide_char_need_to_free; //NOTE: Not null if there is a file that got dropped
+};
+
+static PlatformInputState global_platformInput;

@@ -12,3 +12,8 @@ Aimed to be a text editor that:
 5. A cross between Sublime Text and 4Coder
 
 It's really just for me as a fun project, something to practice using Direct3d and practice getting better at programming :)
+
+
+##If you encounter a crash bug: 
+
+Go to %UserName%/AppData/Local/CrashDumps and get the crash file that corresponds to your crash. Please send to ollietheexplorer@gmail.com

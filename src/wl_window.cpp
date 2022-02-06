@@ -19,14 +19,15 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 	}
 
 	
-	
+		
+	float buffer_title_height = font.fontHeight*fontScale;
 	{		
 		//NOTE: Draw the outline around the file name
-		float height = font.fontHeight*fontScale;
+		
 		float2 centre = get_centre_rect2f(window_bounds);
 		float2 scale = get_scale_rect2f(window_bounds);
-		scale.y = height;
-		centre.y = -0.5f*height;
+		scale.y = buffer_title_height;
+		centre.y = -0.5f*buffer_title_height;
 		pushRectOutline(renderer, make_float3(centre.x, centre.y, 1.0f), scale, editorState->color_palette.standard);
 
 		//NOTE: Draw the name of the file
@@ -55,7 +56,7 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 	float startX = window_bounds.minX - w->scroll_pos.x;
 
 	float xAt = startX;
-	float yAt = -1.5f*font.fontHeight*fontScale - window_bounds.minY - w->scroll_pos.y;
+	float yAt = -1.0f*font.fontHeight*fontScale - buffer_title_height - window_bounds.minY - w->scroll_pos.y;
 
 	u8 *at = str;
 

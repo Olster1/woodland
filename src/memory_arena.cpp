@@ -191,5 +191,5 @@ char *nullTerminateBuffer(char *result, char *string, int length) {
     return result;
 }
 
-#define nullTerminate(string, length) nullTerminateBuffer((char *)malloc(length + 1), string, length)
+#define nullTerminate(string, length) nullTerminateBuffer((char *)platform_alloc_memory(length + 1, false), string, length)
 #define nullTerminateArena(string, length, arena) nullTerminateBuffer((char *)pushArray(arena, length + 1, char), string, length)

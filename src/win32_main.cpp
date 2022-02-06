@@ -37,66 +37,56 @@ static HWND global_wndHandle;
 static ID3D11Device1 *global_d3d11Device;
 static bool global_windowDidResize = false;
 
-enum PlatformKeyType {
-    PLATFORM_KEY_NULL,
-    PLATFORM_KEY_UP,
-    PLATFORM_KEY_DOWN,
-    PLATFORM_KEY_RIGHT,
-    PLATFORM_KEY_LEFT,
-    PLATFORM_KEY_X,
-    PLATFORM_KEY_Z,
+//TODO:  From docs: Because the system cannot compact a private heap, it can become fragmented.
+//TODO:  This means we don't want to use heap alloc, we would rather use a memory arena
+static void *
+platform_alloc_memory(size_t size, bool zeroOut)
+{
 
-    PLATFORM_KEY_F5,
+    void *result = HeapAlloc(GetProcessHeap(), 0, size);
 
-    PLATFORM_KEY_LEFT_CTRL,
-    PLATFORM_KEY_O,
+    if(zeroOut) {
+        memset(result, 0, size);
+    }
 
-    PLATFORM_KEY_MINUS,
-    PLATFORM_KEY_PLUS,
+    #if DEBUG_BUILD
+        DEBUG_add_memory_block_size(&global_debug_stats, result, size);
+    #endif
 
-    PLATFORM_KEY_BACKSPACE,
+    return result;
+}
 
-    PLATFORM_MOUSE_LEFT_BUTTON,
-    PLATFORM_MOUSE_RIGHT_BUTTON,
-    
-    // NOTE: Everything before here
-    PLATFORM_KEY_TOTAL_COUNT
-};
+//NOTE: Used by the game layer
+static void platform_free_memory(void *data)
+{
+#if DEBUG_BUILD
+    DEUBG_remove_memory_block_size(&global_debug_stats, data);
+#endif
 
-struct PlatformKeyState {
-    bool isDown;
-    int pressedCount;
-    int releasedCount;
-};
+    HeapFree(GetProcessHeap(), 0, data);
 
-#define PLATFORM_MAX_TEXT_BUFFER_SIZE_IN_BYTES 256
-#define PLATFORM_MAX_KEY_INPUT_BUFFER 16
+}
+//NOTE: Used by the game layer
+static void *platform_alloc_memory_pages(size_t size)
+{
+#if DEBUG_BUILD
+    global_debug_stats.total_virtual_alloc += size;
+#endif
+    //NOTE: According to the docs this just gets zeroed out
+    return VirtualAlloc(0, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE); 
 
-struct PlatformInputState {
+}
 
-    PlatformKeyState keyStates[PLATFORM_KEY_TOTAL_COUNT]; 
+static u8 *platform_realloc_memory(void *src, u32 bytesToMove, size_t sizeToAlloc) {
+    u8 *result = (u8 *)platform_alloc_memory(sizeToAlloc, true);
 
-    //NOTE: Mouse data
-    float mouseX;
-    float mouseY;
-    float mouseScrollX;
-    float mouseScrollY;
+    memmove(result, src, bytesToMove);
 
-    //NOTE: Text Input
-    uint8_t textInput_utf8[PLATFORM_MAX_TEXT_BUFFER_SIZE_IN_BYTES];
-    int textInput_bytesUsed;
+    platform_free_memory(src);
 
-    PlatformKeyType keyInputCommandBuffer[PLATFORM_MAX_KEY_INPUT_BUFFER];
-    int keyInputCommand_count;
+    return result;
 
-    WCHAR low_surrogate;
-
-    UINT dpi_for_window;
-};
-
-static PlatformInputState global_platformInput;
-
-
+}
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
     LRESULT result = 0;
@@ -110,6 +100,25 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
         global_windowDidResize = true;
     } else if(msg == WM_DPICHANGED) {
         global_platformInput.dpi_for_window = GetDpiForWindow(hwnd);
+
+    } else if(msg == WM_DROPFILES) {
+        //NOTE: Drop files 
+        HDROP drop_data = (HDROP)wparam;
+
+        UINT buffer_size = DragQueryFileW(drop_data, 0, 0, 0);
+
+        char *buffer_memory = (char *)platform_alloc_memory((buffer_size + 1)*sizeof(WCHAR), false);
+
+        DragQueryFileW(drop_data, 0, (LPWSTR)buffer_memory, buffer_size + 1);
+
+        if(global_platformInput.drop_file_name_wide_char_need_to_free) {
+            platform_free_memory(global_platformInput.drop_file_name_wide_char_need_to_free);
+        }
+
+        global_platformInput.drop_file_name_wide_char_need_to_free = buffer_memory;
+
+        DragFinish(drop_data);
+
     } else if(msg == WM_CHAR) {
         
         //NOTE: Dont add backspace to the buffer
@@ -277,6 +286,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
             keyType = PLATFORM_KEY_F5;
         } else if(vk_code == 'X') {
             keyType = PLATFORM_KEY_X;
+        } else if(vk_code == 'P') {
+            keyType = PLATFORM_KEY_P;
         } else if(vk_code == 'O') {
             keyType = PLATFORM_KEY_O;
         } else if(vk_code == VK_OEM_MINUS) {
@@ -316,56 +327,87 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
     return result;
 } 
 
+#include "memory_arena.cpp"
 
-//TODO:  From docs: Because the system cannot compact a private heap, it can become fragmented.
-//TODO:  This means we don't want to use heap alloc, we would rather use a memory arena
-static void *
-platform_alloc_memory(size_t size, bool zeroOut)
-{
+//TODO: I don't know if this is meant to be WCHAR or can do straight utf8
 
-    void *result = HeapAlloc(GetProcessHeap(), 0, size);
+static void platform_copy_text_utf8_to_clipboard(char *text) {
+    if (!OpenClipboard(global_wndHandle))  {
+        //NOTE: Error
+        MessageBoxA(0, "Couldn't open clipboard", "Clip Board Error", MB_OK);
+        return;
+    } else {
 
-    if(zeroOut) {
-        memset(result, 0, size);
+        //NOTE: this frees any memory that has been previously allocated
+        EmptyClipboard(); 
+         
+        assert(sizeof(WCHAR) == 2);
+
+        size_t str_size_in_bytes = easyString_getSizeInBytes_utf8(text);
+
+        // Allocate a global memory object for the text. 
+        HGLOBAL hglbCopy = GlobalAlloc(GMEM_MOVEABLE, (str_size_in_bytes + 1));
+             
+        if (hglbCopy == NULL) { 
+            MessageBoxA(0, "Couldn't close clipboard", "Clip Board Error", MB_OK);
+        } else { 
+         
+            // Lock the handle and copy the text to the buffer. 
+
+            LPTSTR  lptstrCopy = (LPTSTR)GlobalLock(hglbCopy); 
+            memcpy(lptstrCopy, text, str_size_in_bytes); 
+            lptstrCopy[str_size_in_bytes] = '\0';    // null character 
+
+            GlobalUnlock(hglbCopy); 
+
+            // Place the handle on the clipboard. 
+            SetClipboardData(CF_TEXT, hglbCopy); 
+        }
+
+        CloseClipboard();
+    }
+     
+}
+
+
+static char *platform_get_text_utf8_from_clipboard(Memory_Arena *arena) {
+    // Try opening the clipboard
+     if (! OpenClipboard(nullptr)) {
+        //NOTE: Error
+        MessageBoxA(0, "Couldn't open clipboard", "Clip Board Error", MB_OK);
+        return 0;
+     }
+
+    HANDLE hData = GetClipboardData(CF_TEXT); //CF_TEXT for ansi text //CF_UNICODETEXT for unicode text
+    if (hData == nullptr) {
+      MessageBoxA(0, "Couldn't get clipboard data", "Clip Board Error", MB_OK);
+      return 0;
+    } 
+
+    // Lock the handle to get the actual text pointer
+    char * text_from_clipboard = (char *)GlobalLock(hData);
+    if (text_from_clipboard == nullptr) {
+      MessageBoxA(0, "No data in clipboard", "Clip Board Error", MB_OK);
+      return 0;
     }
 
-    #if DEBUG_BUILD
-        DEBUG_add_memory_block_size(&global_debug_stats, result, size);
-    #endif
+    char *result = 0;
+    //NOTE: Put in an arena if the user passes us one, otherwise allocate on the heap
+    if(arena) {
+        result = nullTerminateArena(text_from_clipboard, easyString_getSizeInBytes_utf8(text_from_clipboard), arena);
+    } else {
+        result = nullTerminate(text_from_clipboard, easyString_getSizeInBytes_utf8(text_from_clipboard));    
+    }
+    
 
-    return result;
-}
+    // Release the lock
+    GlobalUnlock(hData);
 
-//NOTE: Used by the game layer
-static void platform_free_memory(void *data)
-{
-#if DEBUG_BUILD
-    DEUBG_remove_memory_block_size(&global_debug_stats, data);
-#endif
-
-    HeapFree(GetProcessHeap(), 0, data);
-
-}
-//NOTE: Used by the game layer
-static void *platform_alloc_memory_pages(size_t size)
-{
-#if DEBUG_BUILD
-    global_debug_stats.total_virtual_alloc += size;
-#endif
-    //NOTE: According to the docs this just gets zeroed out
-    return VirtualAlloc(0, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE); 
-
-}
-
-static u8 *platform_realloc_memory(void *src, u32 bytesToMove, size_t sizeToAlloc) {
-    u8 *result = (u8 *)platform_alloc_memory(sizeToAlloc, true);
-
-    memmove(result, src, bytesToMove);
-
-    platform_free_memory(src);
-
-    return result;
-
+    // Release the clipboard
+    CloseClipboard();
+        
+       
+     return result;
 }
 
 static void *Platform_OpenFile_withDialog_wideChar_haveToFree() {
@@ -603,6 +645,9 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int
     }
 
     global_wndHandle = hwnd;
+
+    //NOTE: We want our app to be able to accept dragging files on to. This allows the WM_DROPFILES message to be sent to us
+    DragAcceptFiles(hwnd, true);
 
 
     //TODO: Change to using memory arena? 
