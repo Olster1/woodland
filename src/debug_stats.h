@@ -35,6 +35,8 @@ static void DEUBG_remove_memory_block_size(DEBUG_stats *stats, void *ptr) {
             	assert(stats->total_heap_allocated >= block->size);
 				stats->total_heap_allocated -= block->size;
 				stats->memory_block_count--;
+				stats->memory_blocks[i] = stats->memory_blocks[stats->memory_block_count];
+
             	break;
             }
         }
