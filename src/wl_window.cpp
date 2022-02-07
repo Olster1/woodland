@@ -9,13 +9,14 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 
 	pushShader(renderer, &rectOutlineShader);
 
+	float2 window_scale = get_scale_rect2f(window_bounds);
+
 	if(editorState->window_count_used > 1) 
 	{
-		
 
 	 	float2 centre = get_centre_rect2f(window_bounds);
-	 	float2 scale = get_scale_rect2f(window_bounds);
-		pushRectOutline(renderer, make_float3(centre.x, -centre.y, 1.0f), scale, editorState->color_palette.standard);
+	 	
+		pushRectOutline(renderer, make_float3(centre.x, -centre.y, 1.0f), window_scale, editorState->color_palette.standard);
 	}
 
 	
@@ -23,9 +24,8 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 	float buffer_title_height = font.fontHeight*fontScale;
 	{		
 		//NOTE: Draw the outline around the file name
-		
+		float2 scale = window_scale;
 		float2 centre = get_centre_rect2f(window_bounds);
-		float2 scale = get_scale_rect2f(window_bounds);
 		scale.y = buffer_title_height;
 		centre.y = -0.5f*buffer_title_height;
 		pushRectOutline(renderer, make_float3(centre.x, centre.y, 1.0f), scale, editorState->color_palette.standard);
@@ -54,9 +54,12 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 	
 	
 	float startX = window_bounds.minX - w->scroll_pos.x;
+	float startY = -1.0f*font.fontHeight*fontScale - buffer_title_height - window_bounds.minY + w->scroll_pos.y;
 
 	float xAt = startX;
-	float yAt = -1.0f*font.fontHeight*fontScale - buffer_title_height - window_bounds.minY - w->scroll_pos.y;
+	float yAt = startY;
+
+	float max_x = 0;
 
 	u8 *at = str;
 
@@ -68,7 +71,7 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 	bool parsing = true;
 	EasyTokenizer tokenizer = lexBeginParsing(str, EASY_LEX_OPTION_EAT_WHITE_SPACE);
 
-
+	bool drawing = false;
 	//NOTE: Output the buffer
 	while(*at) {
 
@@ -93,6 +96,14 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 		
 		float factor = 1.0f;
 
+		if(yAt < 0 && yAt >= -(window_bounds.maxY + font.fontHeight)) {
+			drawing = true;
+		} else {
+			drawing = false;
+		}
+
+
+
 		if(rune == '\n' || rune == '\r') {
 			yAt -= font.fontHeight*fontScale;
 			xAt = startX;
@@ -107,7 +118,7 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 		// 	//NOTE: Skip
 		// 	factor = 0.0f;
 			
-		} else {
+		} else if(drawing) {
 
 			GlyphInfo g = easyFont_getGlyph(&font, rune);
 
@@ -138,10 +149,19 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 
 			xAt += (g.width + g.xoffset)*fontScale*factor;
 
+			if((xAt) > max_x) {
+				max_x = xAt;
+			}
+
 			newLine = false;
 
 		}
 	}
+
+	w->max_scroll_bounds.x = max_x - startX;
+
+	//both should be positive versions
+	w->max_scroll_bounds.y = get_abs_value(yAt - startY);
 
 
 	//NOTE: Draw the cursor
@@ -153,9 +173,19 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 
 		float2 scale = make_float2(cursor_width*fontScale, font.fontHeight*fontScale);
 
-		
+		pushTexture(renderer, global_white_texture, make_float3(cursorX, cursorY, 1.0f), scale, editorState->color_palette.standard, make_float4(0, 1, 0, 1));
 
-		pushTexture(renderer, global_white_texture, make_float3(cursorX, cursorY, 1.0f), scale, make_float4(0, 0, 1, 1), make_float4(0, 1, 0, 1));
+		w->scroll_target_pos = make_float2(w->scroll_pos.x, w->scroll_pos.y);
+
+		if(w->should_scroll_to) { 
+			if(cursorX < window_bounds.minX || cursorX > window_bounds.maxX) {
+				w->scroll_target_pos = make_float2(cursorX - startX - 0.5f*window_scale.x, w->scroll_target_pos.y);
+			}
+
+			if(cursorY < window_bounds.minY || cursorY > window_bounds.maxY) {
+				w->scroll_target_pos = make_float2(w->scroll_target_pos.x, get_abs_value(cursorY - startY) - 0.5f*window_scale.y);
+			}
+		} 
 	}
 
 

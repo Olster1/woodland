@@ -719,7 +719,8 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int
         //NOTE: Clear our input command buffer
         global_platformInput.keyInputCommand_count = 0;
 
-        
+        global_platformInput.mouseScrollX = 0;
+        global_platformInput.mouseScrollY = 0;
         //NOTE: Clear the key pressed and released count before processing our messages
         for(int i = 0; i < PLATFORM_KEY_TOTAL_COUNT; ++i) {
             global_platformInput.keyStates[i].pressedCount = 0;

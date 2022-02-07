@@ -49,8 +49,13 @@ typedef struct {
 	char *file_name_utf8;
 	bool is_up_to_date;
 	float2 scroll_pos;
+	float2 scroll_target_pos; //NOTE: Velocity of our scrolling
+	float2 scroll_dp;
+	bool should_scroll_to;
 	/////////////////////////
 
+
+	float2 max_scroll_bounds; 
 
 	Rect2f bounds_; //This is a percentage of the window
 
@@ -89,12 +94,15 @@ static WL_Window *open_new_window(EditorState *editorState) {
 	//NOTE: Set up the first buffer
 	WL_Window *w = &editorState->windows[editorState->window_count_used++];
 	w->buffer_index = editorState->buffer_count_used++;
+	w->should_scroll_to = false;
 
 	assert(editorState->buffer_count_used < MAX_BUFFER_COUNT);
 	initBuffer(&editorState->buffers_loaded[w->buffer_index]);
 	w->name = "untitled";
 	w->file_name_utf8 = "null";
 	w->is_up_to_date = true;
+
+	w->max_scroll_bounds = make_float2(0, 0);
 
 
 	if(editorState->window_count_used > 1) {
@@ -140,7 +148,7 @@ static void open_file_and_add_to_new_window(EditorState *editorState, char *file
 }
 
 
-static void DEBUG_draw_stats(Renderer *renderer, Font *font, float windowWidth, float windowHeight) {
+static void DEBUG_draw_stats(EditorState *editorState, Renderer *renderer, Font *font, float windowWidth, float windowHeight) {
 
 	float16 orthoMatrix = make_ortho_matrix_top_left_corner(windowWidth, windowHeight, MATH_3D_NEAR_CLIP_PlANE, MATH_3D_FAR_CLIP_PlANE);
 	pushMatrix(renderer, orthoMatrix);
@@ -164,14 +172,20 @@ static void DEBUG_draw_stats(Renderer *renderer, Font *font, float windowWidth, 
 	float spacing = font->fontHeight*fontScale;
 
 #define DEBUG_draw_stats_MACRO(title, size, draw_kilobytes) { char *name_str = 0; if(draw_kilobytes) { name_str = easy_createString_printf(&globalPerFrameArena, "%s  %d %dkilobytes", title, size, size/1000); } else { name_str = easy_createString_printf(&globalPerFrameArena, "%s  %d", title, size); } draw_text(renderer, font, name_str, xAt, yAt, fontScale, color); yAt -= spacing; }
+#define DEBUG_draw_stats_FLOAT_MACRO(title, f0, f1) { char *name_str = 0; name_str = easy_createString_printf(&globalPerFrameArena, "%s  %f  %f", title, f0, f1); draw_text(renderer, font, name_str, xAt, yAt, fontScale, color); yAt -= spacing; }
 	
 	DEBUG_draw_stats_MACRO("Total Heap Allocated", global_debug_stats.total_heap_allocated, true);
 	DEBUG_draw_stats_MACRO("Total Virtual Allocated", global_debug_stats.total_virtual_alloc, true);
 	DEBUG_draw_stats_MACRO("Render Command Count", global_debug_stats.render_command_count, false);
 	DEBUG_draw_stats_MACRO("Draw Count", global_debug_stats.draw_call_count, false);
 	DEBUG_draw_stats_MACRO("Heap Block Count ", global_debug_stats.memory_block_count, false);
-
 	DEBUG_draw_stats_MACRO("Per Frame Arena Total Size", DEBUG_get_total_arena_size(&globalPerFrameArena), true);
+
+	WL_Window *w = &editorState->windows[editorState->active_window_index];
+	DEBUG_draw_stats_FLOAT_MACRO("Scroll Max: ", w->max_scroll_bounds.x, w->max_scroll_bounds.y);
+	DEBUG_draw_stats_FLOAT_MACRO("Target Scroll: ", w->scroll_target_pos.x, w->scroll_target_pos.y);
+
+	DEBUG_draw_stats_FLOAT_MACRO("mouse scroll x ", global_platformInput.mouseScrollX, global_platformInput.mouseScrollY);
 
 }
 
@@ -309,17 +323,72 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 				bool is_active = (i == editorState->active_window_index);
 
 				if(is_active) 
-				{
+				{	
 
-					w->scroll_pos.x += global_platformInput.mouseScrollX;
-					w->scroll_pos.y += global_platformInput.mouseScrollY;
-
-					if(w->scroll_pos.y < 0) {
-						w->scroll_pos.y = 0;
+					bool user_scrolled = false;
+					if(get_abs_value(global_platformInput.mouseScrollX) > 0 || get_abs_value(global_platformInput.mouseScrollY) > 0) {
+						w->should_scroll_to = false;
+						user_scrolled = true;
 					}
+
+					w->scroll_pos = lerp_float2(w->scroll_pos, w->scroll_target_pos, 0.3f);
+
+					if(!w->should_scroll_to) {
+						float speed_factor = 10.0f;
+
+						if(user_scrolled) {
+							w->scroll_dp = make_float2(speed_factor*global_platformInput.mouseScrollX, -speed_factor*global_platformInput.mouseScrollY);
+						}
+
+						w->scroll_pos.x += dt*w->scroll_dp.x;
+						w->scroll_pos.y += dt*w->scroll_dp.y; 						
+
+						float drag = 0.9f;
+
+						//TODO: This should be in a fixed update loop
+
+						w->scroll_dp.x *= drag;
+						w->scroll_dp.y *= drag;
+					}
+
+
+					Rect2f window_bounds = make_rect2f(w->bounds_.minX*windowWidth, w->bounds_.minY*windowWidth, w->bounds_.maxX*windowWidth, w->bounds_.maxY*windowHeight);
+
 
 					if(w->scroll_pos.x < 0) {
 						w->scroll_pos.x = 0;
+						w->scroll_dp.x = 0;
+					}	
+
+					if(w->scroll_pos.y < 0) {
+						w->scroll_pos.y = 0;
+						w->scroll_dp.y = 0;
+					}
+
+					float2 window_scale = get_scale_rect2f(window_bounds);
+
+					float2 padding = make_float2(50, 0.5f*window_scale.y);
+
+					float max_w = (w->max_scroll_bounds.x - window_scale.x);
+
+					if(max_w < 0) { max_w = 0; padding.x = 0; }
+
+					max_w += padding.x;
+
+					if(w->scroll_pos.x > max_w) {
+						w->scroll_pos.x = max_w;
+						w->scroll_dp.x = 0;
+					}
+
+					float max_h = (w->max_scroll_bounds.y - window_scale.y);
+
+					if(max_h < 0) { max_h = 0; padding.y = 0; }
+
+					max_h += padding.y;
+
+					if(w->scroll_pos.y > max_h) {
+						w->scroll_pos.y = max_h;
+						w->scroll_dp.y = 0;
 					}
 
 					if(easyString_getSizeInBytes_utf8((char *)global_platformInput.textInput_utf8) > 0) {
@@ -335,16 +404,25 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 						//NOTE: Any text added
 						addTextToBuffer(b, (char *)text_from_clipboard, b->cursorAt_inBytes);
 
+						w->should_scroll_to = true;
+
 					}
 
 					//NOTE: Any text added
+					if(global_platformInput.textInput_utf8[0] != '\0') {
 					addTextToBuffer(b, (char *)global_platformInput.textInput_utf8, b->cursorAt_inBytes);
+					w->should_scroll_to = true;
+					}
 
 					// OutputDebugStringA((char *)global_platformInput.textInput_utf8);
 
 					//NOTE: Process our command buffer
 					for(int i = 0; i < global_platformInput.keyInputCommand_count; ++i) {
 					    PlatformKeyType command = global_platformInput.keyInputCommandBuffer[i];
+
+					    w->should_scroll_to = true;
+
+
 					    if(command == PLATFORM_KEY_BACKSPACE && b->cursorAt_inBytes > 0) {
 					       u32 bytesOfPrevRune = 1;
 					       removeTextFromBuffer(b, b->cursorAt_inBytes - 1, bytesOfPrevRune);
@@ -355,13 +433,13 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 					    }
 
 					    if(command == PLATFORM_KEY_LEFT) {
+					    	u32 bytesOfPrevRune = 1;
 					    	endGapBuffer(b);
-
 					        //NOTE: Move cursor left 
 					        if(b->cursorAt_inBytes > 0) {
-
-					        	u32 bytesOfPrevRune = 1;
 					            b->cursorAt_inBytes -= bytesOfPrevRune;
+
+
 					            
 					        }
 					    }
@@ -407,7 +485,7 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 #if DEBUG_BUILD
 	if(editorState->draw_debug_memory_stats) {
 		renderer_defaultScissors(renderer, windowWidth, windowHeight);
-		DEBUG_draw_stats(renderer, &editorState->font, windowWidth, windowHeight);
+		DEBUG_draw_stats(editorState, renderer, &editorState->font, windowWidth, windowHeight);
 	}
 #endif
 

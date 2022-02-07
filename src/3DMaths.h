@@ -1,3 +1,10 @@
+static inline float get_abs_value(float value) {
+	if(value < 0) {
+		value *= -1.0f;
+	}
+	return value;
+}
+
 struct float2
 {
     float x, y;
@@ -20,6 +27,10 @@ static float2 make_float2(float x0, float y0) {
 	result.y = y0;
 
 	return result;
+}
+
+static float2 lerp_float2(float2 a, float2 b, float t) {
+	return make_float2((b.x - a.x)*t + a.x, (b.y - a.y)*t + a.y);
 }
 
 static float3 make_float3(float x0, float y0, float z0) {
