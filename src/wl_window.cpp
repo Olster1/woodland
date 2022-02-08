@@ -1,5 +1,9 @@
 static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *renderer, bool is_active, float windowWidth, float windowHeight, Font font, float4 font_color, float fontScale) {
-	WL_Buffer *b = &editorState->buffers_loaded[w->buffer_index];
+	WL_Open_Buffer *open_buffer = &editorState->buffers_loaded[w->buffer_index];
+
+	WL_Buffer *b = &open_buffer->buffer;
+
+	
 
 	Rect2f window_bounds = make_rect2f(w->bounds_.minX*windowWidth, w->bounds_.minY*windowWidth, w->bounds_.maxX*windowWidth, w->bounds_.maxY*windowHeight);
 
@@ -35,11 +39,11 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 
 		//  
 
-		char *name_str = w->name;
+		char *name_str = open_buffer->name;
 
-		if(!w->is_up_to_date) {
+		if(!open_buffer->is_up_to_date) {
 
-			name_str = easy_createString_printf(&globalPerFrameArena, "%s  %s", w->name, "*");
+			name_str = easy_createString_printf(&globalPerFrameArena, "%s  %s", open_buffer->name, "*");
 		}
 
 		
@@ -53,8 +57,8 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 	// OutputDebugStringA((LPCSTR)"\n");
 	
 	
-	float startX = window_bounds.minX - w->scroll_pos.x;
-	float startY = -1.0f*font.fontHeight*fontScale - buffer_title_height - window_bounds.minY + w->scroll_pos.y;
+	float startX = window_bounds.minX - open_buffer->scroll_pos.x;
+	float startY = -1.0f*font.fontHeight*fontScale - buffer_title_height - window_bounds.minY + open_buffer->scroll_pos.y;
 
 	float xAt = startX;
 	float yAt = startY;
@@ -71,12 +75,17 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 	bool parsing = true;
 	EasyTokenizer tokenizer = lexBeginParsing(str, EASY_LEX_OPTION_EAT_WHITE_SPACE);
 
+	bool hit_start = false;
+	bool hit_end = false;
+
 	bool drawing = false;
 	//NOTE: Output the buffer
 	while(*at) {
 
 	// while(parsing) {
 		// EasyToken token = lexGetNextToken(&tokenizer);
+
+		s8 memory_offset = (s8)(at - str); 
 
 #define UTF8_ADVANCE 1
 #if UTF8_ADVANCE
@@ -93,7 +102,7 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 
   //       OutputDebugStringA((char *)string);
 
-		
+
 		float factor = 1.0f;
 
 		if(yAt < 0 && yAt >= -(window_bounds.maxY + font.fontHeight)) {
@@ -119,6 +128,19 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 		// 	factor = 0.0f;
 			
 		} else if(drawing) {
+
+			//NOTE: Draw selectable overlay
+			if(is_active && editorState->selectable_state.is_active) {
+				if(memory_offset == editorState->selectable_state.start_offset_in_bytes) {
+					editorState->selectable_state.start_pos = make_float2(xAt, yAt);
+					hit_start = true;
+				}
+
+				if(memory_offset == editorState->selectable_state.end_offset_in_bytes) {
+					editorState->selectable_state.end_pos = make_float2(xAt, yAt);
+					hit_end = true;
+				}
+			}
 
 			GlyphInfo g = easyFont_getGlyph(&font, rune);
 
@@ -158,10 +180,10 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 		}
 	}
 
-	w->max_scroll_bounds.x = max_x - startX;
+	open_buffer->max_scroll_bounds.x = max_x - startX;
 
 	//both should be positive versions
-	w->max_scroll_bounds.y = get_abs_value(yAt - startY);
+	open_buffer->max_scroll_bounds.y = get_abs_value(yAt - startY);
 
 
 	//NOTE: Draw the cursor
@@ -175,17 +197,38 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 
 		pushTexture(renderer, global_white_texture, make_float3(cursorX, cursorY, 1.0f), scale, editorState->color_palette.standard, make_float4(0, 1, 0, 1));
 
-		w->scroll_target_pos = make_float2(w->scroll_pos.x, w->scroll_pos.y);
+		open_buffer->scroll_target_pos = make_float2(open_buffer->scroll_pos.x, open_buffer->scroll_pos.y);
 
-		if(w->should_scroll_to) { 
+		if(open_buffer->should_scroll_to) { 
 			if(cursorX < window_bounds.minX || cursorX > window_bounds.maxX) {
-				w->scroll_target_pos = make_float2(cursorX - startX - 0.5f*window_scale.x, w->scroll_target_pos.y);
+				open_buffer->scroll_target_pos = make_float2(cursorX - startX - 0.5f*window_scale.x, open_buffer->scroll_target_pos.y);
 			}
 
-			if(cursorY < window_bounds.minY || cursorY > window_bounds.maxY) {
-				w->scroll_target_pos = make_float2(w->scroll_target_pos.x, get_abs_value(cursorY - startY) - 0.5f*window_scale.y);
+			if(cursorY > -window_bounds.minY || cursorY < -window_bounds.maxY) {
+				open_buffer->scroll_target_pos = make_float2(open_buffer->scroll_target_pos.x, get_abs_value(cursorY - startY) - 0.5f*window_scale.y);
 			}
 		} 
+
+		if(editorState->selectable_state.is_active) {
+
+			assert(hit_start);
+			assert(hit_end);
+
+			float start_x = editorState->selectable_state.start_pos.x;
+			float end_x = editorState->selectable_state.end_pos.x;
+
+			if(start_x > end_x) {
+				end_x = editorState->selectable_state.start_pos.x;
+				start_x = editorState->selectable_state.end_pos.x;
+			} 
+
+			assert(start_x < end_x);
+
+			float2 scale = make_float2(end_x - start_x, font.fontHeight*fontScale);
+			pushTexture(renderer, global_white_texture, make_float3(start_x + 0.5f*scale.x, editorState->selectable_state.start_pos.y, 1.0f), scale, make_float4(1, 0, 0, 1), make_float4(0, 1, 0, 1));
+		}
+
+
 	}
 
 

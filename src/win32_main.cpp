@@ -282,6 +282,14 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
             addToCommandBuffer = keyIsDown;
         } else if(vk_code == 'Z') {
             keyType = PLATFORM_KEY_Z;
+        } else if(vk_code == VK_OEM_2) {
+            keyType = PLATFORM_KEY_FULL_FORWARD_SLASH;
+        } else if(vk_code == VK_OEM_PERIOD) {
+            keyType = PLATFORM_KEY_FULL_STOP;
+        } else if(vk_code == VK_OEM_COMMA) {
+            keyType = PLATFORM_KEY_COMMA;
+        } else if(vk_code == VK_SHIFT) {
+            keyType = PLATFORM_KEY_SHIFT;
         } else if(vk_code == VK_F5) {
             keyType = PLATFORM_KEY_F5;
         } else if(vk_code == 'X') {
@@ -290,12 +298,14 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
             keyType = PLATFORM_KEY_P;
         } else if(vk_code == 'O') {
             keyType = PLATFORM_KEY_O;
+        } else if(vk_code == 'V') {
+            keyType = PLATFORM_KEY_V;
         } else if(vk_code == VK_OEM_MINUS) {
             keyType = PLATFORM_KEY_MINUS;
         } else if(vk_code == VK_OEM_PLUS) {
             keyType = PLATFORM_KEY_PLUS;
         } else if(vk_code == VK_CONTROL) {
-            keyType = PLATFORM_KEY_LEFT_CTRL;
+            keyType = PLATFORM_KEY_CTRL;
         } else if(vk_code == VK_BACK) {
             keyType = PLATFORM_KEY_BACKSPACE;
 
