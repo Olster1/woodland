@@ -141,16 +141,11 @@ static void removeTextFromBuffer(WL_Buffer *b, int bytesStart, int toRemoveCount
 
 static u8 *compileBuffer_toNullTerminateString(WL_Buffer *b) {
 	bool wroteCursor = false;
-	u8 *result = (u8 *)platform_alloc_memory(b->bufferSize_inBytes + 2, true); //NOTE: For null terminator and cursor spot
+	u8 *result = (u8 *)platform_alloc_memory(b->bufferSize_inBytes + 1, true); //NOTE: For null terminator and cursor spot
 	int at = 0;
 
 	for(int i = 0; i < b->bufferSize_inUse_inBytes; i++) {
 		
-		if(i == b->cursorAt_inBytes) {
-			result[at++] = '|';
-			wroteCursor = true;
-		}
-
 #if WRITE_GAP_BUFFER_AS_HASH
 		if(i >= b->gapBuffer_startAt && i < b->gapBuffer_endAt) {
 			//NOTE: In Gap Buffer
@@ -164,11 +159,11 @@ static u8 *compileBuffer_toNullTerminateString(WL_Buffer *b) {
 	}
 
 
-	if(!wroteCursor) {
-		result[b->bufferSize_inUse_inBytes] = '|';
-	}
+	// if(!wroteCursor) {
+	// 	result[b->bufferSize_inUse_inBytes] = '|';
+	// }
 
-	result[b->bufferSize_inBytes + 1] = '\0'; //null terminate the buffer
+	result[b->bufferSize_inBytes] = '\0'; //null terminate the buffer
 
 
 	return result;

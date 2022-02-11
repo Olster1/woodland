@@ -57,7 +57,7 @@ enum PlatformKeyType {
     PLATFORM_KEY_Z,
     PLATFORM_KEY_P,
     PLATFORM_KEY_V,
-
+    PLATFORM_KEY_C,
     PLATFORM_KEY_F5,
 
     PLATFORM_KEY_CTRL,

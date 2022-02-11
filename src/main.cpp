@@ -91,6 +91,8 @@ typedef struct {
 
 	Selectable_State selectable_state;
 
+	Ui_State ui_state;
+
 } EditorState;
 
 
@@ -166,9 +168,7 @@ static void open_file_and_add_to_new_window(EditorState *editorState, char *file
 
 		WL_Window *w = open_new_window(editorState);
 
-
 		WL_Open_Buffer *open_buffer = &editorState->buffers_loaded[w->buffer_index];
-
 
 		WL_Buffer *b = &open_buffer->buffer;
 
@@ -178,7 +178,7 @@ static void open_file_and_add_to_new_window(EditorState *editorState, char *file
 		open_buffer->name = getFileLastPortion(open_buffer->file_name_utf8);
 		open_buffer->is_up_to_date = true;
 
-		Win32FreeFileData(data);
+		platform_free_memory(data);
 
 	} else {
 		// assert(!"Couldn't open file");
@@ -220,7 +220,7 @@ static void DEBUG_draw_stats(EditorState *editorState, Renderer *renderer, Font 
 	DEBUG_draw_stats_MACRO("Per Frame Arena Total Size", DEBUG_get_total_arena_size(&globalPerFrameArena), true);
 
 	// WL_Window *w = &editorState->windows[editorState->active_window_index];
-	// DEBUG_draw_stats_FLOAT_MACRO("Scroll Max: ", open_buffer->max_scroll_bounds.x, open_buffer->max_scroll_bounds.y);
+	DEBUG_draw_stats_FLOAT_MACRO("Start at: ", editorState->selectable_state.start_pos.x, editorState->selectable_state.start_pos.y);
 	// DEBUG_draw_stats_FLOAT_MACRO("Target Scroll: ", w->scroll_target_pos.x, w->scroll_target_pos.y);
 
 	// DEBUG_draw_stats_FLOAT_MACRO("mouse scroll x ", global_platformInput.mouseScrollX, global_platformInput.mouseScrollY);
@@ -258,15 +258,15 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 		{
 			editorState->color_palette.background = color_hexARGBTo01(0xFF161616);
 			editorState->color_palette.standard =  color_hexARGBTo01(0xFFA08563);
-			// float4 variable;
-			// float4 bracket;
-			// float4 function;
-			// float4 keyword;
-			// float4 comment;
-			// float4 preprocessor;
+			editorState->color_palette.variable = color_hexARGBTo01(0xFF6B8E23);
+			editorState->color_palette.bracket = color_hexARGBTo01(0xFFA08563);
+			editorState->color_palette.function = color_hexARGBTo01(0xFF008563);
+			editorState->color_palette.keyword = color_hexARGBTo01(0xFFCD950C);
+			editorState->color_palette.comment = color_hexARGBTo01(0xFF7D7D7D);
+			editorState->color_palette.preprocessor = color_hexARGBTo01(0xFFDAB98F);
 		}
 
-		platform_copy_text_utf8_to_clipboard("This is text from Woodland.exe");
+		
 
 	} else {
 		releaseMemoryMark(&global_perFrameArenaMark);
@@ -360,11 +360,7 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 	renderer_defaultScissors(renderer, windowWidth, windowHeight);
 	pushClearColor(renderer, editorState->color_palette.background);
 
-	if(!global_platformInput.keyStates[PLATFORM_KEY_SHIFT].isDown) 
-	{
-		end_select(&editorState->selectable_state);
-	}
-
+	
 	switch(editorState->mode) {
 		case MODE_EDIT_BUFFER: {	
 
@@ -465,6 +461,17 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 
 					}
 
+					//NOTE: Ctrl P -> paste text from clipboard
+					if(global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown && global_platformInput.keyStates[PLATFORM_KEY_C].pressedCount > 0 && editorState->selectable_state.is_active) 
+					{
+						Selectable_Diff diff = selectable_get_bytes_diff(&editorState->selectable_state);
+						platform_copy_text_utf8_to_clipboard((char *)(((u8 *)b->bufferMemory) + diff.start), diff.size);
+
+					}
+
+
+					
+
 					//NOTE: Any text added if not pressing ctrl
 					if(global_platformInput.textInput_utf8[0] != '\0' && !global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown) {
 						addTextToBuffer(b, (char *)global_platformInput.textInput_utf8, b->cursorAt_inBytes);
@@ -500,6 +507,8 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 					        	if(global_platformInput.keyStates[PLATFORM_KEY_SHIFT].isDown) 
 					        	{
 					        		update_select(&editorState->selectable_state, b->cursorAt_inBytes);
+					        	} else {
+					        		end_select(&editorState->selectable_state);
 					        	}
 					        	
 
@@ -507,7 +516,10 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 
 					            if(global_platformInput.keyStates[PLATFORM_KEY_SHIFT].isDown) 
 					        	{
+					        		assert(editorState->selectable_state.is_active);
 					        		update_select(&editorState->selectable_state, b->cursorAt_inBytes);
+					        	} else {
+					        		end_select(&editorState->selectable_state);
 					        	}
 
 					        }
@@ -520,15 +532,21 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 					        if(b->cursorAt_inBytes < b->bufferSize_inUse_inBytes) {
 					        	if(global_platformInput.keyStates[PLATFORM_KEY_SHIFT].isDown) 
 					        	{
+
 					        		update_select(&editorState->selectable_state, b->cursorAt_inBytes);
+					        	} else {
+					        		end_select(&editorState->selectable_state);
 					        	}
 
 					            b->cursorAt_inBytes += bytesOfNextRune;
 
 					            if(global_platformInput.keyStates[PLATFORM_KEY_SHIFT].isDown) 
 					            {
+					            	assert(editorState->selectable_state.is_active);
 					            	update_select(&editorState->selectable_state, b->cursorAt_inBytes);
-					            }
+					            } else {
+					        		end_select(&editorState->selectable_state);
+					        	}
 					        }
 					    }       
 					}

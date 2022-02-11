@@ -74,6 +74,10 @@ FUNC(TOKEN_LESS_THAN)\
 FUNC(TOKEN_GREATER_THAN_OR_EQUAL_TO)\
 FUNC(TOKEN_LESS_THAN_OR_EQUAL_TO)\
 FUNC(TOKEN_SPACE)\
+FUNC(TOKEN_FUNCTION)\
+FUNC(TOKEN_PREPROCESSOR)\
+FUNC(TOKEN_ELSE)\
+FUNC(TOKEN_TYPEDEF_KEYWORD)\
 
 
 
@@ -146,15 +150,16 @@ typedef struct {
 } EasyTokenizer;
 
 typedef enum {
+    EASY_LEX_OPTION_NONE = 0,
     EASY_LEX_OPTION_EAT_WHITE_SPACE = 1 << 0,
-    EASY_LEX_DONT_EAT_SLASH_COMMENTS = 1 << 1,
+    EASY_LEX_EAT_SLASH_COMMENTS = 1 << 1,
 } EasyLexOptions;
 
 EasyTokenizer lexBeginParsing(void *src, EasyLexOptions options) {
     EasyTokenizer result = {};
     result.src = (char *)src;
     result.eatWhiteSpace = options & EASY_LEX_OPTION_EAT_WHITE_SPACE;
-    result.parseComments = !(options & EASY_LEX_DONT_EAT_SLASH_COMMENTS);
+    result.parseComments = !(options & EASY_LEX_EAT_SLASH_COMMENTS);
     result.parsing = true;
     return result;
 }
@@ -188,9 +193,17 @@ EasyToken lexGetToken_(EasyTokenizer *tokenizer, bool advanceWithToken) {
     char *at = tokenizer->src;
     int *lineNumber = &tokenizer->lineNumber;
     EasyToken token = lexInitToken(TOKEN_UNINITIALISED, at, 1, *lineNumber);
-    if(tokenizer->eatWhiteSpace) { at = lexEatWhiteSpace(at); } else { at = lexEatSpaces(at); }
+    if(tokenizer->eatWhiteSpace) { at = lexEatWhiteSpace(at); }
     
     switch(*at) {
+        case ' ': {
+            token = lexInitToken(TOKEN_SPACE, at, 1, *lineNumber);
+            at++;
+            while(*at == ' ') {
+                at++;
+                token.size++;
+            }
+        } break;
         case ';': {
             token = lexInitToken(TOKEN_SEMI_COLON, at, 1, *lineNumber);
             at++;
@@ -200,7 +213,7 @@ EasyToken lexGetToken_(EasyTokenizer *tokenizer, bool advanceWithToken) {
             at++;
         } break;
         case '.': {
-            token = lexInitToken(TOKEN_PERIOD, at, 1, *lineNumber);
+            token = lexInitToken(TOKEN_PERIOD, at, 1, *lineNumber); 
             at++;
         } break;
         case '\0': {
@@ -214,6 +227,9 @@ EasyToken lexGetToken_(EasyTokenizer *tokenizer, bool advanceWithToken) {
         case '\r': 
         case '\n': {
             token = lexInitToken(TOKEN_NEWLINE, at, 1, *lineNumber);
+            if(at[0] == '\r' && at[1] == '\n') {
+                at++;
+            }
             at++;
         } break;
         case '\t': {
@@ -351,6 +367,26 @@ EasyToken lexGetToken_(EasyTokenizer *tokenizer, bool advanceWithToken) {
                     at++;
                 }
                 token.size = at - token.at;
+
+                if(at[0] == '(') {
+                    token.type = TOKEN_FUNCTION;
+                } else if(easyString_stringsMatch_null_and_count("for", token.at, token.size)) {
+                    token.type = TOKEN_FOR_KEYWORD;
+                } else if(easyString_stringsMatch_null_and_count("else", token.at, token.size)) {
+                    token.type = TOKEN_ELSE;
+                } else if(easyString_stringsMatch_null_and_count("if", token.at, token.size)) {
+                    token.type = TOKEN_IF_KEYWORD;
+                } else if(easyString_stringsMatch_null_and_count("struct", token.at, token.size)) {
+                    token.type = TOKEN_STRUCT_KEYWORD;
+                } else if(easyString_stringsMatch_null_and_count("while", token.at, token.size)) {
+                    token.type = TOKEN_WHILE_KEYWORD;
+                } else if(easyString_stringsMatch_null_and_count("return", token.at, token.size)) {
+                    token.type = TOKEN_RETURN_KEYWORD;
+                } else if(easyString_stringsMatch_null_and_count("break", token.at, token.size)) {
+                    token.type = TOKEN_BREAK_KEYWORD;
+                } else if(easyString_stringsMatch_null_and_count("typedef", token.at, token.size)) {
+                    token.type = TOKEN_TYPEDEF_KEYWORD;
+                }
                 
             } else if(lexIsNumeric(*at) || *at == '-') {
                 token = lexInitToken(TOKEN_INTEGER, at, 1, *lineNumber);

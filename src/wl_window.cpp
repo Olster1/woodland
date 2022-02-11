@@ -65,69 +65,81 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 
 	float max_x = 0;
 
-	u8 *at = str;
-
 	float cursorX = 0;
 	float cursorY = 0;
 
 	bool newLine = true;
 
 	bool parsing = true;
-	EasyTokenizer tokenizer = lexBeginParsing(str, EASY_LEX_OPTION_EAT_WHITE_SPACE);
+	EasyTokenizer tokenizer = lexBeginParsing(str, EASY_LEX_OPTION_NONE);
 
-	bool hit_start = false;
-	bool hit_end = false;
+	bool hit_start = true;
+	bool hit_end = true;
+
+	s32 memory_offset = 0;
 
 	bool drawing = false;
 	//NOTE: Output the buffer
-	while(*at) {
+	
 
-	// while(parsing) {
-		// EasyToken token = lexGetNextToken(&tokenizer);
+	while(parsing) {
+		EasyToken token = lexGetNextToken(&tokenizer);
 
-		s8 memory_offset = (s8)(at - str); 
-
-#define UTF8_ADVANCE 1
-#if UTF8_ADVANCE
-		u32 rune = easyUnicode_utf8_codepoint_To_Utf32_codepoint(&((char *)at), true);
-#else 
-		u32 rune = (u32)(*at);
-		at++;
-
-#endif	
-		//NOTE: DEBUG PURPOSES
-		// GlyphInfo g = easyFont_getGlyph(&font, rune);
-		// char string[256];
-  //       sprintf(string, "%c: %d\n", rune, g.hasTexture);
-
-  //       OutputDebugStringA((char *)string);
-
-
-		float factor = 1.0f;
-
-		if(yAt < 0 && yAt >= -(window_bounds.maxY + font.fontHeight)) {
-			drawing = true;
-		} else {
-			drawing = false;
+		if(token.type == TOKEN_NULL_TERMINATOR) {
+			parsing = false;
+			break;
 		}
 
+		if(token.type == TOKEN_SPACE) {
+			int B = 0;
+		}
+
+		float4 text_color = editorState->color_palette.standard;
+
+		if(token.type == TOKEN_WORD || token.type == TOKEN_STRING || token.type == TOKEN_INTEGER || token.type == TOKEN_FLOAT) {		
+			text_color = editorState->color_palette.variable;
+		} else if(token.type == TOKEN_OPEN_BRACKET || token.type == TOKEN_CLOSE_BRACKET || token.type == TOKEN_OPEN_SQUARE_BRACKET || token.type == TOKEN_CLOSE_SQUARE_BRACKET) {		
+			text_color = editorState->color_palette.bracket;
+		} else if(token.type == TOKEN_FUNCTION) {		
+			text_color = editorState->color_palette.function;
+		} else if(token.type == TOKEN_FOR_KEYWORD || token.type == TOKEN_IF_KEYWORD || token.type == TOKEN_WHILE_KEYWORD || token.type == TOKEN_ELSE || token.type == TOKEN_RETURN_KEYWORD || token.type == TOKEN_BREAK_KEYWORD || token.type == TOKEN_STRUCT_KEYWORD || token.type == TOKEN_TYPEDEF_KEYWORD) {		
+			text_color = editorState->color_palette.keyword;
+		} else if(token.type == TOKEN_COMMENT) {		
+			text_color = editorState->color_palette.comment;
+		} else if(token.type == TOKEN_PREPROCESSOR) {		
+			text_color = editorState->color_palette.preprocessor;
+		}
+
+		char *at = token.at;
+		char *start_token = token.at;
+		while((at - start_token) < token.size) {
+
+			memory_offset = (s32)((char *)at - (char *)str); 
+
+	#define UTF8_ADVANCE 1
+	#if UTF8_ADVANCE
+			u32 rune = easyUnicode_utf8_codepoint_To_Utf32_codepoint(&((char *)at), true);
+	#else 
+			u32 rune = (u32)(*at);
+			at++;
+
+	#endif	
+			//NOTE: DEBUG PURPOSES
+			// GlyphInfo g = easyFont_getGlyph(&font, rune);
+			// char string[256];
+	  //       sprintf(string, "%c: %d\n", rune, g.hasTexture);
+
+	  //       OutputDebugStringA((char *)string);
 
 
-		if(rune == '\n' || rune == '\r') {
-			yAt -= font.fontHeight*fontScale;
-			xAt = startX;
-			newLine = true;
-		} else if(rune == '|') {
+			float factor = 1.0f;
 
-			cursorX = xAt;
-			cursorY = yAt;
+			if(yAt < 0 && yAt >= -(window_bounds.maxY + font.fontHeight)) {
+				drawing = true;
+			} else {
+				drawing = false;
+			}
 
-		// } else if(rune == '#') {
-
-		// 	//NOTE: Skip
-		// 	factor = 0.0f;
-			
-		} else if(drawing) {
 
 			//NOTE: Draw selectable overlay
 			if(is_active && editorState->selectable_state.is_active) {
@@ -142,41 +154,56 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 				}
 			}
 
-			GlyphInfo g = easyFont_getGlyph(&font, rune);
-
-			assert(g.unicodePoint == rune);
-
-			// if(rune == ' ') {
-			// 	g.width = 0.5f*easyFont_getGlyph(&font, 'l').width;
-			// }
-
-			if(g.hasTexture) {
+			if(memory_offset == b->cursorAt_inBytes) {
+				cursorX = xAt;
+				cursorY = yAt;
+			}
 
 
-				float4 color = font_color;//make_float4(0, 0, 0, 1);
-				float2 scale = make_float2(g.width*fontScale, g.height*fontScale);
+			if(rune == '\n' || rune == '\r') {
+				yAt -= font.fontHeight*fontScale;
+				xAt = startX;
+				newLine = true;
+				
+			} else if(drawing) {
 
-				if(newLine) {
-					xAt = 0.6f*scale.x + startX;
+
+				GlyphInfo g = easyFont_getGlyph(&font, rune);
+
+				assert(g.unicodePoint == rune);
+
+				// if(rune == ' ') {
+				// 	g.width = 0.5f*easyFont_getGlyph(&font, 'l').width;
+				// }
+
+				if(g.hasTexture) {
+
+
+					float4 color = font_color;//make_float4(0, 0, 0, 1);
+					float2 scale = make_float2(g.width*fontScale, g.height*fontScale);
+
+					if(newLine) {
+						xAt = 0.6f*scale.x + startX;
+					}
+
+					float offsetY = -0.5f*scale.y;
+
+					float3 pos = {};
+					pos.x = xAt + fontScale*g.xoffset;
+					pos.y = yAt + -fontScale*g.yoffset + offsetY;
+					pos.z = 1.0f;
+					pushGlyph(renderer, g.handle, pos, scale, text_color, g.uvCoords);
 				}
 
-				float offsetY = -0.5f*scale.y;
+				xAt += (g.width + g.xoffset)*fontScale*factor;
 
-				float3 pos = {};
-				pos.x = xAt + fontScale*g.xoffset;
-				pos.y = yAt + -fontScale*g.yoffset + offsetY;
-				pos.z = 1.0f;
-				pushGlyph(renderer, g.handle, pos, scale, font_color, g.uvCoords);
+				if((xAt) > max_x) {
+					max_x = xAt;
+				}
+
+				newLine = false;
+
 			}
-
-			xAt += (g.width + g.xoffset)*fontScale*factor;
-
-			if((xAt) > max_x) {
-				max_x = xAt;
-			}
-
-			newLine = false;
-
 		}
 	}
 
@@ -188,6 +215,12 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 
 	//NOTE: Draw the cursor
 	if(is_active) {
+
+		if(memory_offset == b->cursorAt_inBytes) {
+			cursorX = xAt;
+			cursorY = yAt;
+		}
+
 		pushShader(renderer, &textureShader);
 
 		//NOTE: Draw the cursor
@@ -195,7 +228,7 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 
 		float2 scale = make_float2(cursor_width*fontScale, font.fontHeight*fontScale);
 
-		pushTexture(renderer, global_white_texture, make_float3(cursorX, cursorY, 1.0f), scale, editorState->color_palette.standard, make_float4(0, 1, 0, 1));
+		pushTexture(renderer, global_white_texture, make_float3(cursorX, cursorY + 0.25f*font.fontHeight*fontScale, 1.0f), scale, editorState->color_palette.standard, make_float4(0, 1, 0, 1));
 
 		open_buffer->scroll_target_pos = make_float2(open_buffer->scroll_pos.x, open_buffer->scroll_pos.y);
 
@@ -212,7 +245,9 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 		if(editorState->selectable_state.is_active) {
 
 			assert(hit_start);
-			assert(hit_end);
+			if(!hit_end) {
+				editorState->selectable_state.end_pos.x = xAt;
+			}
 
 			float start_x = editorState->selectable_state.start_pos.x;
 			float end_x = editorState->selectable_state.end_pos.x;
@@ -222,10 +257,14 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 				start_x = editorState->selectable_state.end_pos.x;
 			} 
 
-			assert(start_x < end_x);
+			assert(start_x <= end_x);
+
+			float draw_y = editorState->selectable_state.start_pos.y + 0.25f*font.fontHeight*fontScale;
+
+			pushShader(renderer, &rectOutlineShader);
 
 			float2 scale = make_float2(end_x - start_x, font.fontHeight*fontScale);
-			pushTexture(renderer, global_white_texture, make_float3(start_x + 0.5f*scale.x, editorState->selectable_state.start_pos.y, 1.0f), scale, make_float4(1, 0, 0, 1), make_float4(0, 1, 0, 1));
+			pushRectOutline(renderer, make_float3(start_x + 0.5f*scale.x, draw_y, 1.0f), scale, editorState->color_palette.standard);
 		}
 
 

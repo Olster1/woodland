@@ -37,6 +37,9 @@ static HWND global_wndHandle;
 static ID3D11Device1 *global_d3d11Device;
 static bool global_windowDidResize = false;
 
+static bool w32_got_system_info = false;
+SYSTEM_INFO w32_system_info = {}; 
+
 //TODO:  From docs: Because the system cannot compact a private heap, it can become fragmented.
 //TODO:  This means we don't want to use heap alloc, we would rather use a memory arena
 static void *
@@ -66,14 +69,35 @@ static void platform_free_memory(void *data)
     HeapFree(GetProcessHeap(), 0, data);
 
 }
+
+
+static u64 platform_get_memory_page_size() {
+    if(w32_got_system_info == false)
+    {
+        w32_got_system_info = true;
+        GetSystemInfo(&w32_system_info);
+    }
+    return w32_system_info.dwPageSize;
+}
+
+
 //NOTE: Used by the game layer
-static void *platform_alloc_memory_pages(size_t size)
-{
+static void *platform_alloc_memory_pages(size_t size) {
+
+
+    u64 page_size = platform_get_memory_page_size();
+
+    size_t size_to_alloc = size + (page_size - 1);
+
+    size_to_alloc -= size_to_alloc % page_size; 
+
 #if DEBUG_BUILD
-    global_debug_stats.total_virtual_alloc += size;
+    global_debug_stats.total_virtual_alloc += size_to_alloc;
 #endif
+
+
     //NOTE: According to the docs this just gets zeroed out
-    return VirtualAlloc(0, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE); 
+    return VirtualAlloc(0, size_to_alloc, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE); 
 
 }
 
@@ -288,6 +312,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
             keyType = PLATFORM_KEY_FULL_STOP;
         } else if(vk_code == VK_OEM_COMMA) {
             keyType = PLATFORM_KEY_COMMA;
+        } else if(vk_code == 'C') {
+            keyType = PLATFORM_KEY_C;
         } else if(vk_code == VK_SHIFT) {
             keyType = PLATFORM_KEY_SHIFT;
         } else if(vk_code == VK_F5) {
@@ -341,7 +367,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 
 //TODO: I don't know if this is meant to be WCHAR or can do straight utf8
 
-static void platform_copy_text_utf8_to_clipboard(char *text) {
+static void platform_copy_text_utf8_to_clipboard(char *text, size_t str_size_in_bytes) {
+    if(str_size_in_bytes == 0) { return; }
     if (!OpenClipboard(global_wndHandle))  {
         //NOTE: Error
         MessageBoxA(0, "Couldn't open clipboard", "Clip Board Error", MB_OK);
@@ -353,13 +380,13 @@ static void platform_copy_text_utf8_to_clipboard(char *text) {
          
         assert(sizeof(WCHAR) == 2);
 
-        size_t str_size_in_bytes = easyString_getSizeInBytes_utf8(text);
+        // size_t str_size_in_bytes = easyString_getSizeInBytes_utf8(text);
 
         // Allocate a global memory object for the text. 
         HGLOBAL hglbCopy = GlobalAlloc(GMEM_MOVEABLE, (str_size_in_bytes + 1));
              
         if (hglbCopy == NULL) { 
-            MessageBoxA(0, "Couldn't close clipboard", "Clip Board Error", MB_OK);
+            MessageBoxA(0, "Couldn't allocate memory", "Clip Board Error", MB_OK);
         } else { 
          
             // Lock the handle and copy the text to the buffer. 
@@ -595,13 +622,6 @@ static bool Platform_LoadEntireFile_utf8(char *filename_utf8, void **data, size_
     return result;
 
 }
-
-static void
-Win32FreeFileData(void *data)
-{
-    platform_free_memory(data);
-}
-
 
 #include "3DMaths.h"
 #include "render.c"
