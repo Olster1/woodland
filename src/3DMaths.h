@@ -158,3 +158,14 @@ static float16 make_ortho_matrix_origin_center(float planeWidth, float planeHeig
 
 	return result;
 }
+
+
+static bool in_rect2f_bounds(Rect2f bounds, float2 point) {
+	bool result = false;
+
+	if(point.x >= bounds.minX && point.x < bounds.maxX && point.y >= bounds.minY && point.y < bounds.maxY) {
+		result = true;
+	}
+
+	return result;
+}

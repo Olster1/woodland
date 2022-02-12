@@ -1,4 +1,4 @@
-static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *renderer, bool is_active, float windowWidth, float windowHeight, Font font, float4 font_color, float fontScale) {
+static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *renderer, bool is_active, float windowWidth, float windowHeight, Font font, float4 font_color, float fontScale, int window_index, float2 mouse_point_top_left_origin) {
 	WL_Open_Buffer *open_buffer = &editorState->buffers_loaded[w->buffer_index];
 
 	WL_Buffer *b = &open_buffer->buffer;
@@ -6,6 +6,18 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 	
 
 	Rect2f window_bounds = make_rect2f(w->bounds_.minX*windowWidth, w->bounds_.minY*windowWidth, w->bounds_.maxX*windowWidth, w->bounds_.maxY*windowHeight);
+
+
+	float handle_width = 10;
+	Rect2f bounds0 = make_rect2f(window_bounds.maxX - handle_width,  window_bounds.minY, window_bounds.maxX + handle_width, window_bounds.maxY);
+
+
+	if(editorState->window_count_used > 1 && window_index < (editorState->window_count_used - 1) && in_rect2f_bounds(bounds0, mouse_point_top_left_origin) && global_platformInput.keyStates[PLATFORM_MOUSE_LEFT_BUTTON].pressedCount > 0)
+	{
+		try_begin_interaction(&editorState->ui_state, WL_INTERACTION_RESIZE_WINDOW, window_index);
+	}
+
+
 
 	float16 orthoMatrix = make_ortho_matrix_top_left_corner(windowWidth, windowHeight, MATH_3D_NEAR_CLIP_PlANE, MATH_3D_FAR_CLIP_PlANE);
 	pushMatrix(renderer, orthoMatrix);
@@ -19,8 +31,14 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 	{
 
 	 	float2 centre = get_centre_rect2f(window_bounds);
+
+	 	float4 color = editorState->color_palette.standard;
+	 	if(in_rect2f_bounds(bounds0, mouse_point_top_left_origin)) {
+	 		color = editorState->color_palette.function;
+	 	}
+
 	 	
-		pushRectOutline(renderer, make_float3(centre.x, -centre.y, 1.0f), window_scale, editorState->color_palette.standard);
+		pushRectOutline(renderer, make_float3(centre.x, -centre.y, 1.0f), window_scale, color);
 	}
 
 	

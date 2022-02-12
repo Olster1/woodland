@@ -223,7 +223,7 @@ static void DEBUG_draw_stats(EditorState *editorState, Renderer *renderer, Font 
 	DEBUG_draw_stats_FLOAT_MACRO("Start at: ", editorState->selectable_state.start_pos.x, editorState->selectable_state.start_pos.y);
 	// DEBUG_draw_stats_FLOAT_MACRO("Target Scroll: ", w->scroll_target_pos.x, w->scroll_target_pos.y);
 
-	// DEBUG_draw_stats_FLOAT_MACRO("mouse scroll x ", global_platformInput.mouseScrollX, global_platformInput.mouseScrollY);
+	DEBUG_draw_stats_FLOAT_MACRO("mouse scroll x ", global_platformInput.mouseX / windowWidth, global_platformInput.mouseY / windowHeight);
 
 }
 
@@ -254,6 +254,8 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 		editorState->draw_debug_memory_stats = false;
 		
 		open_new_window(editorState);
+
+		editorState->ui_state.id.id = -1;
 
 		{
 			editorState->color_palette.background = color_hexARGBTo01(0xFF161616);
@@ -319,7 +321,7 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 
 
 	//NOTE: For removing a window
-	if(global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown && global_platformInput.keyStates[PLATFORM_KEY_FULL_FORWARD_SLASH].pressedCount > 0) 
+	if(global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown && global_platformInput.keyStates[PLATFORM_KEY_FULL_FORWARD_SLASH].pressedCount > 0 && !is_interaction_active(&editorState->ui_state, WL_INTERACTION_RESIZE_WINDOW)) 
 	{
 		close_current_window(editorState);
 	}
@@ -335,7 +337,7 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 	}
 
 	//NOTE: Ctrl X -new window
-	if(global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown && global_platformInput.keyStates[PLATFORM_KEY_FULL_STOP].pressedCount > 0) 
+	if(global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown && global_platformInput.keyStates[PLATFORM_KEY_FULL_STOP].pressedCount > 0 && !is_interaction_active(&editorState->ui_state, WL_INTERACTION_RESIZE_WINDOW)) 
 	{
 		open_new_window(editorState);
 	}
@@ -360,9 +362,36 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 	renderer_defaultScissors(renderer, windowWidth, windowHeight);
 	pushClearColor(renderer, editorState->color_palette.background);
 
-	
+	float2 mouse_point_top_left_origin = make_float2(global_platformInput.mouseX, global_platformInput.mouseY);	
+	float2 mouse_point_top_left_origin_01 = make_float2(global_platformInput.mouseX / windowWidth, global_platformInput.mouseY / windowHeight);
+
 	switch(editorState->mode) {
 		case MODE_EDIT_BUFFER: {	
+
+			if(is_interaction_active(&editorState->ui_state, WL_INTERACTION_RESIZE_WINDOW)) {
+				if(global_platformInput.keyStates[PLATFORM_MOUSE_LEFT_BUTTON].isDown) {
+					WL_Window *w = &editorState->windows[editorState->ui_state.id.id];
+
+					float max_border = mouse_point_top_left_origin_01.x;
+
+					if(max_border <= w->bounds_.minX) {
+						max_border = w->bounds_.minX + 0.001;
+
+						if(max_border > 1.0f) { max_border = 1.0f; }
+					}
+
+					w->bounds_.maxX = max_border;
+
+					assert(editorState->ui_state.id.id < (editorState->window_count_used - 1));
+
+					WL_Window *w1 = &editorState->windows[editorState->ui_state.id.id + 1];
+
+					w1->bounds_.minX = max_border;
+
+				} else {
+					end_interaction(&editorState->ui_state);
+				}
+			}
 
 			for(int i = 0; i < editorState->window_count_used; ++i) {
 				WL_Window *w = &editorState->windows[i];
@@ -554,7 +583,7 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 
 				
 
-				draw_wl_window(editorState, w, renderer, is_active, windowWidth, windowHeight, editorState->font, editorState->color_palette.standard, editorState->fontScale);
+				draw_wl_window(editorState, w, renderer, is_active, windowWidth, windowHeight, editorState->font, editorState->color_palette.standard, editorState->fontScale, i, mouse_point_top_left_origin);
 			}
 		} break;
 	}
