@@ -45,7 +45,10 @@ typedef struct {
 	void *scratch_storage;
 } PlatformLayer; 
 
-
+struct Platform_File_Handle {
+    void *data;
+    bool has_errors;
+};
 
 enum PlatformKeyType {
     PLATFORM_KEY_NULL,

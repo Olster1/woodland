@@ -6,6 +6,7 @@
 #include "font.cpp"
 #include "ui.cpp"
 #include "selectable.cpp"
+#include "save_settings.cpp"
 
 
 inline char *easy_createString_printf(Memory_Arena *arena, char *formatString, ...) {
@@ -93,26 +94,26 @@ typedef struct {
 
 	Ui_State ui_state;
 
+	Settings_To_Save settings_to_save;
+
+	char *save_file_location_utf8;
+
 } EditorState;
 
 
 #include "wl_window.cpp"
 
-static WL_Window *open_new_window(EditorState *editorState) {
-	//NOTE: Set up the first buffer
-	WL_Window *w = &editorState->windows[editorState->window_count_used++];
-	w->buffer_index = editorState->buffer_count_used++;
-
+static int open_new_backing_buffer(EditorState *editorState) {
 	assert(editorState->buffer_count_used < MAX_BUFFER_COUNT);
+		
+	int buffer_index_to_use = editorState->buffer_count_used++;
 
-	
-	WL_Open_Buffer *open_buffer = &editorState->buffers_loaded[w->buffer_index];
-	
+	WL_Open_Buffer *open_buffer = &editorState->buffers_loaded[buffer_index_to_use];
+
 
 	initBuffer(&open_buffer->buffer);
 
 	open_buffer->should_scroll_to = false;
-
 
 	open_buffer->name = "untitled";
 	open_buffer->file_name_utf8 = "null";
@@ -120,6 +121,15 @@ static WL_Window *open_new_window(EditorState *editorState) {
 
 	open_buffer->max_scroll_bounds = make_float2(0, 0);
 
+	return buffer_index_to_use;
+
+}
+
+static WL_Window *open_new_window(EditorState *editorState) {
+	//NOTE: Set up the first buffer
+	WL_Window *w = &editorState->windows[editorState->window_count_used++];
+	w->buffer_index = open_new_backing_buffer(editorState);
+	
 
 	if(editorState->window_count_used > 1) {
 		WL_Window *last_w = &editorState->windows[editorState->window_count_used - 2];
@@ -144,29 +154,49 @@ static WL_Window *open_new_window(EditorState *editorState) {
 
 static void close_current_window(EditorState *editorState) {
 	if(editorState->window_count_used > 1) {
+			
+		if(editorState->active_window_index < (editorState->window_count_used - 1)) {
+			//NOTE: Not the last buffer
+			editorState->windows[editorState->active_window_index + 1].bounds_.minX = editorState->windows[editorState->active_window_index].bounds_.minX; 
+		} else {
+			editorState->windows[editorState->active_window_index - 1].bounds_.maxX = editorState->windows[editorState->active_window_index].bounds_.maxX; 
+		}
+
+		//Move all the windows down - we need to do this since the index value needs to be preseverd becuase it's what the window knows what is in order
+		for(int i = editorState->active_window_index; i < (editorState->window_count_used - 1); ++i) {
+			editorState->windows[i] = editorState->windows[i + 1];
+		}
 
 		editorState->window_count_used--;
-
-		//NOTE: Set up the first buffer
-		editorState->windows[editorState->active_window_index] = editorState->windows[editorState->window_count_used];
-
 		editorState->active_window_index--;
 
 		if(editorState->active_window_index < 0) {
 			editorState->active_window_index = 0;
 		}
-
-		//Readjust all bounds now
 	}
 
 }
 
-static void open_file_and_add_to_new_window(EditorState *editorState, char *file_name_wide_char) {
+enum Open_File_Into_Buffer_Type {
+	OPEN_FILE_INTO_NEW_WINDOW,
+	OPEN_FILE_INTO_CURRENT_WINDOW,
+};
+
+static void open_file_and_add_to_window(EditorState *editorState, char *file_name_wide_char, Open_File_Into_Buffer_Type open_type) {
 	size_t data_size = 0;
 	void *data = 0;
 	if(Platform_LoadEntireFile_wideChar(file_name_wide_char, &data, &data_size)) {
 
-		WL_Window *w = open_new_window(editorState);
+		WL_Window *w = 0;
+		if(open_type == OPEN_FILE_INTO_NEW_WINDOW) {
+			w = open_new_window(editorState);	
+		} else if(open_type == OPEN_FILE_INTO_CURRENT_WINDOW) {
+			w = &editorState->windows[editorState->active_window_index];
+			w->buffer_index = open_new_backing_buffer(editorState);
+		} else {
+			assert(!"invalid code path"); 
+		}
+		
 
 		WL_Open_Buffer *open_buffer = &editorState->buffers_loaded[w->buffer_index];
 
@@ -228,17 +258,16 @@ static void DEBUG_draw_stats(EditorState *editorState, Renderer *renderer, Font 
 }
 
 
-static EditorState *updateEditor(float dt, float windowWidth, float windowHeight) {
+static EditorState *updateEditor(float dt, float windowWidth, float windowHeight, bool resized_window) {
 	EditorState *editorState = (EditorState *)global_platform.permanent_storage;
 	assert(sizeof(EditorState) < global_platform.permanent_storage_size);
 	if(!editorState->initialized) {
 
-		// longTermArena = initMemoryArena_withMemory(global_platform.permanent_storage, global_platform.permanent_storage_size - sizeof(EditorState));
+		global_long_term_arena = initMemoryArena_withMemory(((u8 *)global_platform.permanent_storage) + sizeof(EditorState), global_platform.permanent_storage_size - sizeof(EditorState));
 
 		globalPerFrameArena = initMemoryArena(Kilobytes(100));
 		global_perFrameArenaMark = takeMemoryMark(&globalPerFrameArena);
 
-		
 		editorState->initialized = true;
 
 		initRenderer(&editorState->renderer);
@@ -254,6 +283,8 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 		editorState->draw_debug_memory_stats = false;
 		
 		open_new_window(editorState);
+
+		editorState->save_file_location_utf8 = platform_get_save_file_location_utf8(&global_long_term_arena);
 
 		editorState->ui_state.id.id = -1;
 
@@ -275,6 +306,11 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 		global_perFrameArenaMark = takeMemoryMark(&globalPerFrameArena);
 	}
 
+	if(resized_window) {
+		char *file_path = concatInArena(editorState->save_file_location_utf8, "/user.settings", &globalPerFrameArena);
+		save_settings(&editorState->settings_to_save, file_path);
+	}
+
 	Renderer *renderer = &editorState->renderer;
 
 	//NOTE: Clear the renderer out so we can start again
@@ -283,7 +319,7 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 	/////////KEYBOARD COMMANDS BELOW /////////////
 
 	if(global_platformInput.drop_file_name_wide_char_need_to_free != 0) {
-		open_file_and_add_to_new_window(editorState, global_platformInput.drop_file_name_wide_char_need_to_free);
+		open_file_and_add_to_window(editorState, global_platformInput.drop_file_name_wide_char_need_to_free, OPEN_FILE_INTO_NEW_WINDOW);
 
 		platform_free_memory(global_platformInput.drop_file_name_wide_char_need_to_free);
 		global_platformInput.drop_file_name_wide_char_need_to_free = 0;
@@ -349,7 +385,7 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 		//NOTE: Make sure free the string
 		char *fileNameToOpen = (char *)Platform_OpenFile_withDialog_wideChar_haveToFree();
 
-		open_file_and_add_to_new_window(editorState, fileNameToOpen);
+		open_file_and_add_to_window(editorState, fileNameToOpen, OPEN_FILE_INTO_CURRENT_WINDOW);
 
 		platform_free_memory(fileNameToOpen);
 

@@ -179,8 +179,13 @@ unsigned int easyUnicode_utf8_codepoint_To_Utf32_codepoint(char **streamPtr, int
 	unsigned int fiveBitsFull = (1 << 4 | 1 << 3 | 1 << 2 | 1 << 1 | 1 << 0);
 	unsigned int fourBitsFull = (1 << 3 | 1 << 2 | 1 << 1 | 1 << 0);
 
-	if(easyUnicode_isContinuationByte(stream[0])) { EASY_HEADERS_ASSERT(!"shouldn't be a continuation byte. Have you advanced pointer correctly?"); }
-	int unicodeLen = easyUnicode_unicodeLength(stream[0]);
+	int unicodeLen = 1;
+	if(easyUnicode_isContinuationByte(stream[0])) { 
+		result =  '?';
+	} else {
+		unicodeLen = easyUnicode_unicodeLength(stream[0]);
+	} 
+	
 	if(unicodeLen > 1) {
 		EASY_HEADERS_ASSERT(easyUnicode_isLeadingByte(stream[0]));
 		//needs to be decoded

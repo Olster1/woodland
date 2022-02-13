@@ -2,7 +2,7 @@
 
 typedef struct MemoryPiece MemoryPiece;
 typedef struct MemoryPiece {
-    void *memory;
+    u8 *memory;
     size_t totalSize; //size of just this memory block
     // size_t totalSizeOfArena; //size of total arena to roll back with
     size_t currentSize;
@@ -179,8 +179,10 @@ void releaseMemoryMark(MemoryArenaMark *mark) {
     assert(piece->currentSize <= piece->totalSize);
 }
 
-static Memory_Arena globalPerFrameArena;
+static Memory_Arena globalPerFrameArena = {0};
 static MemoryArenaMark global_perFrameArenaMark;
+
+static Memory_Arena global_long_term_arena = {0};
 
 
 char *nullTerminateBuffer(char *result, char *string, int length) {
@@ -193,3 +195,37 @@ char *nullTerminateBuffer(char *result, char *string, int length) {
 
 #define nullTerminate(string, length) nullTerminateBuffer((char *)platform_alloc_memory(length + 1, false), string, length)
 #define nullTerminateArena(string, length, arena) nullTerminateBuffer((char *)pushArray(arena, length + 1, char), string, length)
+
+#define concat_withLength(a, aLength, b, bLength) concat_(a, aLength, b, bLength, 0)
+#define concat(a, b) concat_(a, easyString_getSizeInBytes_utf8(a), b, easyString_getSizeInBytes_utf8(b), 0)
+#define concatInArena(a, b, arena) concat_(a, easyString_getSizeInBytes_utf8(a), b, easyString_getSizeInBytes_utf8(b), arena)
+char *concat_(char *a, s32 lengthA, char *b, s32 lengthB, Memory_Arena *arena) {
+    int aLen = lengthA;
+    int bLen = lengthB;
+    
+    int newStrLen = aLen + bLen + 1; // +1 for null terminator
+    char *newString = 0;
+    if(arena) {
+        newString = (char *)pushArray(arena, newStrLen, char);
+    } else {
+        newString = (char *)platform_alloc_memory(newStrLen, true); 
+    }
+    assert(newString);
+    
+    newString[newStrLen - 1] = '\0';
+    
+    char *at = newString;
+    for (int i = 0; i < aLen; ++i)
+    {
+        *at++ = a[i];
+    }
+    
+    for (int i = 0; i < bLen; ++i)
+    {
+        *at++ = b[i];
+    }
+    assert(at == &newString[newStrLen - 1]);
+    assert(newString[newStrLen - 1 ] == '\0');
+    
+    return newString;
+}

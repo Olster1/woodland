@@ -5,6 +5,9 @@
 #include <d3dcompiler.h>
 #include <windows.h>
 #include <shobjidl.h>
+#include <Shlobj.h>
+#include <shlwapi.h>
+#include <wchar.h>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "../libs/stb_image.h"
@@ -502,27 +505,177 @@ static void *platform_wide_char_to_utf8_allocates_on_heap(void *win32_wideString
     return result;
 }
 
+static WCHAR *platform_utf8_to_wide_char(char *string_utf8, Memory_Arena *arena) {
 
-// void *result = 0;
+    WCHAR *result = 0;
 
-// OPENFILENAME config = {};
-// config.lStructSize = sizeof(OPENFILENAME);
-// config.hwndOwner = global_wndHandle; // Put the owner window handle here.
-// config.lpstrFilter = L"\0\0"; // Put the file extension here.
+    int characterCount = MultiByteToWideChar(CP_UTF8, 0, string_utf8, -1, 0, 0);
 
-// wchar_t *path = (wchar_t *)Win32HeapAlloc(MAX_PATH*sizeof(wchar_t), true);
-// path[0] = 0;
+    size_t bufferSize_inBytes = (characterCount + 1)*sizeof(u16);
 
-// config.lpstrFile = path;
-// config.lpstrDefExt = L"cpp" + 1;
-// config.nMaxFile = sizeof(path) / sizeof(path[0]);
-// config.Flags = OFN_FILEMUSTEXIST;
-// config.Flags |= OFN_NOCHANGEDIR;//To prevent GetOpenFileName() from changing the working directory
+    result = (WCHAR *)pushSize(&globalPerFrameArena, bufferSize_inBytes);
 
-// if (GetOpenFileNameW(&config)) {
-//     // `path` contains the file
+    size_t bytesWritten = MultiByteToWideChar(CP_UTF8, 0, string_utf8, -1, (LPWSTR)result, characterCount);
+
+    return result;
+}
+
+
+
+static Platform_File_Handle platform_begin_file_write_utf8_file_path (char *path_utf8, Memory_Arena *arena) {
+
+    Platform_File_Handle Result = {};
+
+    DWORD desired_access = GENERIC_READ | GENERIC_WRITE;
+    DWORD share_mode = 0;
+    SECURITY_ATTRIBUTES security_attributes = { (DWORD)sizeof(SECURITY_ATTRIBUTES) };
+    DWORD creation_disposition = CREATE_ALWAYS;
+    DWORD flags_and_attributes = 0;
+    HANDLE template_file = 0;
+    
+    WCHAR *path16 = (WCHAR *)platform_utf8_to_wide_char(path_utf8, arena);
+
+    HANDLE FileHandle = CreateFileW((WCHAR*)path16,
+                           desired_access,
+                           share_mode,
+                           &security_attributes,
+                           creation_disposition,
+                           flags_and_attributes,
+                           template_file);
+    
+    if(FileHandle != INVALID_HANDLE_VALUE)
+    {
+        Result.data = FileHandle;
+    }
+    else
+    {
+        DWORD Error = GetLastError();
+        Result.has_errors = true;
+    }
+    
+    return Result;
+}
+
+static void platform_close_file(Platform_File_Handle handle)
+{
+    HANDLE FileHandle = (HANDLE)handle.data;
+    if(FileHandle)
+    {
+        CloseHandle(FileHandle);
+    }
+}
+
+static void platform_write_file_data(Platform_File_Handle handle, void *memory, size_t size_to_write, size_t offset)
+{
+    if(!handle.has_errors) {
+        HANDLE FileHandle = (HANDLE)handle.data;
+        if(FileHandle)
+        {
+            if(SetFilePointer(FileHandle, offset, 0, FILE_BEGIN) !=  INVALID_SET_FILE_POINTER)
+            {
+                DWORD BytesWritten;
+                if(WriteFile(FileHandle, memory, (DWORD)size_to_write, &BytesWritten, 0))
+                {
+                    if(BytesWritten == size_to_write) {
+                    } else {
+                        assert(!"soemthing went wrong");
+                    } 
+                }
+                else
+                {
+                    assert(!"Read file did not succeed");
+                }
+            }
+        }
+    } else {
+        assert(!"File handle not correct");
+    }
+}
+
+static char *platform_get_save_file_location_utf8(Memory_Arena *arena) {
+    char *result = 0;
+
+    PWSTR  win32_wideString_utf16 = 0; 
+
+    //NOTE(ollie): Get the folder name
+    if(SHGetKnownFolderPath(
+      FOLDERID_LocalAppData,
+      KF_FLAG_CREATE,
+      0,
+      (PWSTR *)&win32_wideString_utf16
+    ) != S_OK) {
+        assert(false);
+        return result;
+    }
+
+    //TODO: Remove max path - get actual string length and put it in a tmep arena
+    WCHAR buffer[MAX_PATH] = {};
+
+    memcpy(buffer, win32_wideString_utf16, wcslen(win32_wideString_utf16)*sizeof(WCHAR)); 
+
+
+    PathAppendW(buffer, L"\\Woodland_Editor\\");
+
+    int bufferSize_inBytes = WideCharToMultiByte(
+      CP_UTF8,
+      0,
+      (LPCWCH)buffer,
+      -1,
+      (LPSTR)result, 
+      0,
+      0, 
+      0
+    );
+
+    result = (char *)pushSize(arena, max(bufferSize_inBytes, MAX_PATH*sizeof(u8)));
+
+    u32 bytesWritten = WideCharToMultiByte(
+      CP_UTF8,
+      0,
+      (LPCWCH)win32_wideString_utf16,
+      -1,
+      (LPSTR)result, 
+      bufferSize_inBytes,
+      0, 
+      0
+    );
+
+
+    
+
+    if(CreateDirectoryW((WCHAR *)buffer, 0))
+    {
+
+    }
+
+    //NOTE(ollie): Free the string
+    CoTaskMemFree(win32_wideString_utf16);
+
+    return result;
+}
+
+// function void
+// OS_DeleteFile(String8 path)
+// {
+//     M_Temp scratch = GetScratch(0, 0);
+//     String16 path16 = Str16From8(scratch.arena, path);
+//     DeleteFileW((WCHAR*)path16.str);
+//     ReleaseScratch(scratch);
 // }
-// return path;
+
+// function B32
+// OS_MakeDirectory(String8 path)
+// {
+//     M_Temp scratch = GetScratch(0, 0);
+//     String16 path16 = Str16From8(scratch.arena, path);
+//     B32 result = 1;
+//     if(!CreateDirectoryW((WCHAR *)path16.str, 0))
+//     {
+//         result = 0;
+//     }
+//     ReleaseScratch(scratch);
+//     return result;
+// }
 
 
 
@@ -704,7 +857,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int
     //NOTE: Allocate stuff
     global_platform.permanent_storage_size = PERMANENT_STORAGE_SIZE;
 
-    global_platform.permanent_storage = VirtualAlloc(0, global_platform.permanent_storage_size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+    global_platform.permanent_storage = platform_alloc_memory_pages(global_platform.permanent_storage_size);
    
     /////////////////////
 
@@ -806,11 +959,14 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int
             textBuffer[cursorAt + i] = tempBuffer[i]; 
         }
 
+        bool resized_window = false;
         if(global_windowDidResize)
         {
             d3d_release_and_resize_default_frame_buffer(backendRenderer);
 
             //NOTE: Make new ortho matrix here
+
+            resized_window = true;
 
             global_windowDidResize = false;
         }
@@ -819,7 +975,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int
         RECT winRect;
         GetClientRect(hwnd, &winRect);
 
-        EditorState *editorState = updateEditor(dt, (float)(winRect.right - winRect.left), (float)(winRect.bottom - winRect.top));
+        EditorState *editorState = updateEditor(dt, (float)(winRect.right - winRect.left), (float)(winRect.bottom - winRect.top), resized_window);
 
 
         // //NOTE: Process our command buffer
