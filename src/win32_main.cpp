@@ -15,8 +15,6 @@
 #define STB_TRUETYPE_IMPLEMENTATION 
 #include "../libs/stb_truetype.h"
 
-#define EASY_STRING_IMPLEMENTATION 1
-#include "easy_string_utf8.h"
 
 #include <stdint.h> //for the type uint8_t for our text input buffer
 #include <stdio.h>
@@ -29,6 +27,10 @@
 #define PERMANENT_STORAGE_SIZE  Megabytes(32)
 
 #include "platform.h"
+
+#define EASY_STRING_IMPLEMENTATION 1
+#include "easy_string_utf8.h"
+
 
 #include "debug_stats.h"
 
@@ -505,7 +507,7 @@ static void *platform_wide_char_to_utf8_allocates_on_heap(void *win32_wideString
     return result;
 }
 
-static WCHAR *platform_utf8_to_wide_char(char *string_utf8, Memory_Arena *arena) {
+static u16 *platform_utf8_to_wide_char(char *string_utf8, Memory_Arena *arena) {
 
     WCHAR *result = 0;
 
@@ -517,7 +519,7 @@ static WCHAR *platform_utf8_to_wide_char(char *string_utf8, Memory_Arena *arena)
 
     size_t bytesWritten = MultiByteToWideChar(CP_UTF8, 0, string_utf8, -1, (LPWSTR)result, characterCount);
 
-    return result;
+    return (u16 *)result;
 }
 
 
@@ -608,13 +610,19 @@ static char *platform_get_save_file_location_utf8(Memory_Arena *arena) {
         return result;
     }
 
+    WCHAR *append_str = L"\\Woodland_Editor\\";
+
+    assert(easyString_getSizeInBytes_utf16((u16 *)win32_wideString_utf16) == wcslen(win32_wideString_utf16)*2);
+
+    size_t str_size_in_bytes = easyString_getSizeInBytes_utf16((u16 *)win32_wideString_utf16) + easyString_getSizeInBytes_utf16((u16 *)append_str);
+
     //TODO: Remove max path - get actual string length and put it in a tmep arena
-    WCHAR buffer[MAX_PATH] = {};
+    WCHAR *buffer = (WCHAR *)pushSize(&globalPerFrameArena, str_size_in_bytes + sizeof(u16));
 
-    memcpy(buffer, win32_wideString_utf16, wcslen(win32_wideString_utf16)*sizeof(WCHAR)); 
+    memcpy(buffer, win32_wideString_utf16, easyString_getSizeInBytes_utf16((u16 *)win32_wideString_utf16)); 
 
 
-    PathAppendW(buffer, L"\\Woodland_Editor\\");
+    PathAppendW(buffer, append_str);
 
     int bufferSize_inBytes = WideCharToMultiByte(
       CP_UTF8,
@@ -632,7 +640,7 @@ static char *platform_get_save_file_location_utf8(Memory_Arena *arena) {
     u32 bytesWritten = WideCharToMultiByte(
       CP_UTF8,
       0,
-      (LPCWCH)win32_wideString_utf16,
+      (LPCWCH)buffer,
       -1,
       (LPSTR)result, 
       bufferSize_inBytes,
@@ -652,6 +660,10 @@ static char *platform_get_save_file_location_utf8(Memory_Arena *arena) {
     CoTaskMemFree(win32_wideString_utf16);
 
     return result;
+}
+
+static bool platform_does_file_exist(u16 *wide_file_name) {
+    return PathFileExistsW((LPCWSTR)wide_file_name);
 }
 
 // function void
@@ -727,6 +739,8 @@ static bool Platform_LoadEntireFile_wideChar(void *filename_wideChar_, void **da
     return read_successful;
 }
 
+
+
 static void *Platform_loadTextureToGPU(void *data, u32 texWidth, u32 texHeight, u32 bytesPerPixel) {
     // Create Texture
     D3D11_TEXTURE2D_DESC textureDesc = {};
@@ -777,6 +791,18 @@ static bool Platform_LoadEntireFile_utf8(char *filename_utf8, void **data, size_
 }
 
 #include "3DMaths.h"
+
+static float2 platform_get_window_xy_pos() {
+    float2 result = make_float2(0, 0);
+    RECT dim = {};
+    if(GetWindowRect(global_wndHandle, &dim)) {
+        result.x = dim.left;
+        result.y = dim.top;
+    }
+    return result;
+}
+
+
 #include "render.c"
 
 
@@ -787,6 +813,10 @@ static bool Platform_LoadEntireFile_utf8(char *filename_utf8, void **data, size_
 
 int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int cmdshow)
 {
+    Settings_To_Save settings_to_save = {};
+    char *save_file_location_utf8 = 0;
+
+
     // Open a window
     HWND hwnd;
     {	
@@ -806,8 +836,41 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int
             return GetLastError();
         }
 
+        LONG window_width = 960;
+        LONG window_height = 540;
+
+        //NOTE: Allocate stuff
+        global_platform.permanent_storage_size = PERMANENT_STORAGE_SIZE;
+        global_platform.permanent_storage = platform_alloc_memory_pages(global_platform.permanent_storage_size);
+        
+
+        global_long_term_arena = initMemoryArena_withMemory(((u8 *)global_platform.permanent_storage) + sizeof(EditorState), global_platform.permanent_storage_size - sizeof(EditorState));
+
+        globalPerFrameArena = initMemoryArena(Kilobytes(100));
+        global_perFrameArenaMark = takeMemoryMark(&globalPerFrameArena);
+
+        int window_xAt = CW_USEDEFAULT;
+        int window_yAt = CW_USEDEFAULT;
+
+        //NOTE: Get the settings file we need
+        {
+            save_file_location_utf8 = platform_get_save_file_location_utf8(&global_long_term_arena);
+
+            char *settings_file_path = concatInArena(save_file_location_utf8, "user.settings", &globalPerFrameArena);
+            Settings_To_Save settings_to_save = load_settings(settings_file_path);
+
+            if(settings_to_save.is_valid) {
+                window_width = (LONG)settings_to_save.window_width;
+                window_height = (LONG)settings_to_save.window_height;
+
+                window_xAt = (LONG)settings_to_save.window_xAt;
+                window_yAt = (LONG)settings_to_save.window_yAt;
+            }
+        }
+
+
         //Now create the actual window
-        RECT initialRect = { 0, 0, 960, 540 };
+        RECT initialRect = { 0, 0, window_width, window_height };
         AdjustWindowRectEx(&initialRect, WS_OVERLAPPEDWINDOW, FALSE, WS_EX_OVERLAPPEDWINDOW);
         LONG initialWidth = initialRect.right - initialRect.left;
         LONG initialHeight = initialRect.bottom - initialRect.top;
@@ -816,7 +879,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int
                                 winClass.lpszClassName,
                                 L"Woodland Editor",
                                 WS_OVERLAPPEDWINDOW | WS_VISIBLE,
-                                CW_USEDEFAULT, CW_USEDEFAULT,
+                                window_xAt, window_yAt,
                                 initialWidth, 
                                 initialHeight,
                                 0, 0, hInstance, 0);
@@ -839,26 +902,11 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int
 
     global_platformInput.dpi_for_window = GetDpiForWindow(hwnd);
 
-    char buffer[256];
-    sprintf(buffer, "%d\n", global_platformInput.dpi_for_window);
-    OutputDebugStringA(buffer);
-
     global_d3d11Device = backendRenderer->d3d11Device;
 
-    //NOTE: Create a input buffer to store text input across frames.
-    #define MAX_INPUT_BUFFER_SIZE 128
-    int textBuffer_count = 0;
-    uint8_t textBuffer[MAX_INPUT_BUFFER_SIZE] = {};
+    bool first_frame = true;
 
-    int cursorAt = 0;  //NOTE: Where our cursor position is
-    //////////////////////////////////////////////////////////////
-
-
-    //NOTE: Allocate stuff
-    global_platform.permanent_storage_size = PERMANENT_STORAGE_SIZE;
-
-    global_platform.permanent_storage = platform_alloc_memory_pages(global_platform.permanent_storage_size);
-   
+  
     /////////////////////
 
     // Timing
@@ -880,6 +928,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int
     //NOTE: To store the last time in
     double currentTimeInSeconds = 0.0;
     
+
 
     bool running = true;
     while(running) {
@@ -932,32 +981,32 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int
         }
 
         //NOTE: Find the smallest size we can add to the buffer without overflowing it
-        int bytesToMoveAboveCursor = global_platformInput.textInput_bytesUsed;
-        int spaceLeftInBuffer = (MAX_INPUT_BUFFER_SIZE - textBuffer_count - 1); //minus one to put a null terminating character in
-        if(bytesToMoveAboveCursor > spaceLeftInBuffer) {
-            bytesToMoveAboveCursor = spaceLeftInBuffer;
-        }
+        // int bytesToMoveAboveCursor = global_platformInput.textInput_bytesUsed;
+        // int spaceLeftInBuffer = (MAX_INPUT_BUFFER_SIZE - textBuffer_count - 1); //minus one to put a null terminating character in
+        // if(bytesToMoveAboveCursor > spaceLeftInBuffer) {
+        //     bytesToMoveAboveCursor = spaceLeftInBuffer;
+        // }
 
-        //NOTE: Get all characters above cursor and save them in a buffer
-        char tempBuffer[MAX_INPUT_BUFFER_SIZE] = {};
-        int tempBufferCount = 0;
-        for(int i = cursorAt; i < textBuffer_count; i++) {
-            tempBuffer[tempBufferCount++] = textBuffer[i];
-        }
+        // //NOTE: Get all characters above cursor and save them in a buffer
+        // char tempBuffer[MAX_INPUT_BUFFER_SIZE] = {};
+        // int tempBufferCount = 0;
+        // for(int i = cursorAt; i < textBuffer_count; i++) {
+        //     tempBuffer[tempBufferCount++] = textBuffer[i];
+        // }
 
-        //NOTE: Copy new string into the buffer
-        for(int i = 0; i < bytesToMoveAboveCursor; ++i) {
-            textBuffer[cursorAt + i] = global_platformInput.textInput_utf8[i];
-        }
+        // //NOTE: Copy new string into the buffer
+        // for(int i = 0; i < bytesToMoveAboveCursor; ++i) {
+        //     textBuffer[cursorAt + i] = global_platformInput.textInput_utf8[i];
+        // }
         
-        //NOTE: Advance the cursor and the buffer count
-        textBuffer_count += bytesToMoveAboveCursor;
-        cursorAt += bytesToMoveAboveCursor;
+        // //NOTE: Advance the cursor and the buffer count
+        // textBuffer_count += bytesToMoveAboveCursor;
+        // cursorAt += bytesToMoveAboveCursor;
 
-        //NOTE: Replace characters above the cursor that we would have written over
-        for(int i = 0; i < tempBufferCount; ++i) {
-            textBuffer[cursorAt + i] = tempBuffer[i]; 
-        }
+        // //NOTE: Replace characters above the cursor that we would have written over
+        // for(int i = 0; i < tempBufferCount; ++i) {
+        //     textBuffer[cursorAt + i] = tempBuffer[i]; 
+        // }
 
         bool resized_window = false;
         if(global_windowDidResize)
@@ -975,7 +1024,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int
         RECT winRect;
         GetClientRect(hwnd, &winRect);
 
-        EditorState *editorState = updateEditor(dt, (float)(winRect.right - winRect.left), (float)(winRect.bottom - winRect.top), resized_window);
+        EditorState *editorState = updateEditor(dt, (float)(winRect.right - winRect.left), (float)(winRect.bottom - winRect.top), resized_window && !first_frame, save_file_location_utf8, settings_to_save);
 
 
         // //NOTE: Process our command buffer
@@ -1028,7 +1077,8 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int
         backendRender_processCommandBuffer(&editorState->renderer, backendRenderer);
 
         backendRender_presentFrame(backendRenderer);
-    
+        
+        first_frame = false;
 
 
     }

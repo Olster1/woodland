@@ -258,15 +258,10 @@ static void DEBUG_draw_stats(EditorState *editorState, Renderer *renderer, Font 
 }
 
 
-static EditorState *updateEditor(float dt, float windowWidth, float windowHeight, bool resized_window) {
+static EditorState *updateEditor(float dt, float windowWidth, float windowHeight, bool should_save_settings, char *save_file_location_utf8_only_use_on_inititalize, Settings_To_Save save_settings_only_use_on_inititalize) {
 	EditorState *editorState = (EditorState *)global_platform.permanent_storage;
 	assert(sizeof(EditorState) < global_platform.permanent_storage_size);
 	if(!editorState->initialized) {
-
-		global_long_term_arena = initMemoryArena_withMemory(((u8 *)global_platform.permanent_storage) + sizeof(EditorState), global_platform.permanent_storage_size - sizeof(EditorState));
-
-		globalPerFrameArena = initMemoryArena(Kilobytes(100));
-		global_perFrameArenaMark = takeMemoryMark(&globalPerFrameArena);
 
 		editorState->initialized = true;
 
@@ -284,8 +279,10 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 		
 		open_new_window(editorState);
 
-		editorState->save_file_location_utf8 = platform_get_save_file_location_utf8(&global_long_term_arena);
+		editorState->save_file_location_utf8 = save_file_location_utf8_only_use_on_inititalize;
+		editorState->settings_to_save = save_settings_only_use_on_inititalize;
 
+ 		
 		editorState->ui_state.id.id = -1;
 
 		{
@@ -306,8 +303,16 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 		global_perFrameArenaMark = takeMemoryMark(&globalPerFrameArena);
 	}
 
-	if(resized_window) {
-		char *file_path = concatInArena(editorState->save_file_location_utf8, "/user.settings", &globalPerFrameArena);
+	if(should_save_settings) {
+		editorState->settings_to_save.window_width = windowWidth;
+		editorState->settings_to_save.window_height = windowHeight;
+
+		float2 xy = platform_get_window_xy_pos();
+
+		editorState->settings_to_save.window_xAt = xy.x;
+		editorState->settings_to_save.window_yAt = xy.y;
+
+		char *file_path = concatInArena(editorState->save_file_location_utf8, "user.settings", &globalPerFrameArena);
 		save_settings(&editorState->settings_to_save, file_path);
 	}
 

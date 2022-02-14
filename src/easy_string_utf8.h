@@ -252,6 +252,17 @@ int easyString_getSizeInBytes_utf8(char *string) {
     return result;
 }
 
+int easyString_getSizeInBytes_utf16(u16 *string) { //doesnt include null terminator
+    size_t result = 0;
+    u16 *at = string;
+    while(*at) {
+        result += 2;
+        at++;
+    }
+    return result;
+}
+
+
 int easyString_getStringLength_utf8(char *string) {
     unsigned int result = 0;
     unsigned char *at = (unsigned char *)string;
