@@ -129,6 +129,19 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
         global_windowDidResize = true;
     } else if(msg == WM_DPICHANGED) {
         global_platformInput.dpi_for_window = GetDpiForWindow(hwnd);
+    } else if(msg == WM_SETFOCUS) {
+        //NOTE: Clear out vunerable keys since we only track the down and we can miss the up message if we open a dialog window or player changes screen while holding the key then changes the screen
+        
+        {
+            //Docs: if the high-order bit is 1, the key is down; otherwise, it is up.
+
+            // SHORT ctrl_state = GetKeyState(VK_CONTROL);
+            // SHORT shift_state = GetKeyState(VK_SHIFT);
+
+            // global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown = ctrl_state >> 15;
+            // global_platformInput.keyStates[PLATFORM_KEY_SHIFT].isDown = shift_state >> 15;
+
+        }
 
     } else if(msg == WM_DROPFILES) {
         //NOTE: Drop files 
@@ -319,6 +332,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
             keyType = PLATFORM_KEY_COMMA;
         } else if(vk_code == 'C') {
             keyType = PLATFORM_KEY_C;
+        } else if(vk_code == 'S') {
+            keyType = PLATFORM_KEY_S;
         } else if(vk_code == VK_SHIFT) {
             keyType = PLATFORM_KEY_SHIFT;
         } else if(vk_code == VK_F5) {
@@ -452,13 +467,13 @@ static char *platform_get_text_utf8_from_clipboard(Memory_Arena *arena) {
      return result;
 }
 
-static void *Platform_OpenFile_withDialog_wideChar_haveToFree() {
+static void *Platform_OpenFile_withDialog_wideChar(Memory_Arena *arena) {
     OPENFILENAME config = {};
     config.lStructSize = sizeof(OPENFILENAME);
     config.hwndOwner = global_wndHandle; // Put the owner window handle here.
     config.lpstrFilter = L"\0\0"; // Put the file extension here.
 
-    wchar_t *path = (wchar_t *)platform_alloc_memory(MAX_PATH*sizeof(wchar_t), true);
+    wchar_t *path = (wchar_t *)pushSize(arena, MAX_PATH*sizeof(wchar_t));
     path[0] = 0;
     
     config.lpstrFile = path;
@@ -471,6 +486,31 @@ static void *Platform_OpenFile_withDialog_wideChar_haveToFree() {
         //NOTE: Success
     } 
 
+    return path;
+}
+
+static void *Platform_SaveFile_withDialog_wideChar(Memory_Arena *arena) {
+
+    OPENFILENAME config = {};
+    config.lStructSize = sizeof(OPENFILENAME);
+    config.hwndOwner = global_wndHandle; // Put the owner window handle here.
+    config.lpstrFilter = L"\0\0"; // Put the file extension here.
+
+    wchar_t *path = (wchar_t *)pushSize(arena, MAX_PATH*sizeof(wchar_t));
+    path[0] = 0;
+    
+    config.lpstrFile = path;
+    config.lpstrDefExt = L"cpp" + 1;
+    config.nMaxFile = MAX_PATH;
+    config.Flags = OFN_OVERWRITEPROMPT;
+    config.Flags |= OFN_NOCHANGEDIR;//To prevent GetOpenFileName() from changing the working directory
+
+    if (GetSaveFileNameW(&config)) {
+        //NOTE: Success
+    }  else {
+        //NOTE: Null the path
+        path = NULL;
+    }
     return path;
 }
 
@@ -524,7 +564,7 @@ static u16 *platform_utf8_to_wide_char(char *string_utf8, Memory_Arena *arena) {
 
 
 
-static Platform_File_Handle platform_begin_file_write_utf8_file_path (char *path_utf8, Memory_Arena *arena) {
+static Platform_File_Handle platform_begin_file_write_utf8_file_path (char *path_utf8) {
 
     Platform_File_Handle Result = {};
 
@@ -535,7 +575,7 @@ static Platform_File_Handle platform_begin_file_write_utf8_file_path (char *path
     DWORD flags_and_attributes = 0;
     HANDLE template_file = 0;
     
-    WCHAR *path16 = (WCHAR *)platform_utf8_to_wide_char(path_utf8, arena);
+    WCHAR *path16 = (WCHAR *)platform_utf8_to_wide_char(path_utf8, &globalPerFrameArena);
 
     HANDLE FileHandle = CreateFileW((WCHAR*)path16,
                            desired_access,
@@ -957,6 +997,17 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int
         for(int i = 0; i < PLATFORM_KEY_TOTAL_COUNT; ++i) {
             global_platformInput.keyStates[i].pressedCount = 0;
             global_platformInput.keyStates[i].releasedCount = 0;
+        }
+
+        {
+            //Docs: if the high-order bit is 1, the key is down; otherwise, it is up.
+
+            SHORT ctrl_state = GetKeyState(VK_CONTROL);
+            SHORT shift_state = GetKeyState(VK_SHIFT);
+
+            global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown = ctrl_state >> 15;
+            global_platformInput.keyStates[PLATFORM_KEY_SHIFT].isDown = shift_state >> 15;
+
         }
 
     	MSG msg = {};

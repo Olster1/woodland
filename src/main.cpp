@@ -116,7 +116,7 @@ static int open_new_backing_buffer(EditorState *editorState) {
 	open_buffer->should_scroll_to = false;
 
 	open_buffer->name = "untitled";
-	open_buffer->file_name_utf8 = "null";
+	open_buffer->file_name_utf8 = 0;
 	open_buffer->is_up_to_date = true;
 
 	open_buffer->max_scroll_bounds = make_float2(0, 0);
@@ -313,7 +313,10 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 		editorState->settings_to_save.window_yAt = xy.y;
 
 		char *file_path = concatInArena(editorState->save_file_location_utf8, "user.settings", &globalPerFrameArena);
+
+#if !DEBUG_BUILD
 		save_settings(&editorState->settings_to_save, file_path);
+#endif
 	}
 
 	Renderer *renderer = &editorState->renderer;
@@ -388,13 +391,53 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 	if(global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown && global_platformInput.keyStates[PLATFORM_KEY_O].pressedCount > 0) 
 	{	
 		//NOTE: Make sure free the string
-		char *fileNameToOpen = (char *)Platform_OpenFile_withDialog_wideChar_haveToFree();
+		char *fileNameToOpen_utf16 = (char *)Platform_OpenFile_withDialog_wideChar(&globalPerFrameArena);
 
-		open_file_and_add_to_window(editorState, fileNameToOpen, OPEN_FILE_INTO_CURRENT_WINDOW);
-
-		platform_free_memory(fileNameToOpen);
+		open_file_and_add_to_window(editorState, fileNameToOpen_utf16, OPEN_FILE_INTO_CURRENT_WINDOW);
 
 		end_select(&editorState->selectable_state);
+	}
+
+
+	//NOTE: Ctrl + S -> save file 
+	if(global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown && global_platformInput.keyStates[PLATFORM_KEY_S].pressedCount > 0) 
+	{	
+
+		WL_Window *w = &editorState->windows[editorState->active_window_index];
+
+		WL_Open_Buffer *open_buffer = &editorState->buffers_loaded[w->buffer_index];
+
+		WL_Buffer *b = &open_buffer->buffer;
+
+		if(!open_buffer->file_name_utf8) {
+			//NOTE: Open a Save Dialog window
+			u16 *fileNameToOpen_utf16 = (u16 *)Platform_SaveFile_withDialog_wideChar(&globalPerFrameArena);
+
+			if(fileNameToOpen_utf16) {
+				open_buffer->file_name_utf8 = (char *)platform_wide_char_to_utf8_allocates_on_heap(fileNameToOpen_utf16);
+			}
+
+			
+
+		}
+
+		if(open_buffer->file_name_utf8) { //NOTE: If the user cancels the save dialog box
+
+			Compiled_Buffer_For_Save compiled_buffer = compile_buffer_to_save_format(b, &globalPerFrameArena);
+			
+			Platform_File_Handle handle = platform_begin_file_write_utf8_file_path (open_buffer->file_name_utf8);
+			assert(!handle.has_errors);
+			platform_write_file_data(handle, compiled_buffer.memory, compiled_buffer.size_in_bytes, 0);
+
+			platform_close_file(handle);
+
+			open_buffer->name = getFileLastPortion(open_buffer->file_name_utf8);
+			open_buffer->is_up_to_date = true;
+
+
+		}
+
+		
 	}
 
 

@@ -194,6 +194,10 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 				// 	g.width = 0.5f*easyFont_getGlyph(&font, 'l').width;
 				// }
 
+				// char buffer[245] = {};
+				// sprintf(buffer, "%d\n", g.unicodePoint);
+				// OutputDebugStringA(buffer);
+
 				if(g.hasTexture) {
 
 

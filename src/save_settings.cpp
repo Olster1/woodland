@@ -14,7 +14,7 @@ struct Settings_To_Save {
 
 
 static void save_settings(Settings_To_Save *to_save, char *utf8_full_file_name) {
-	Platform_File_Handle handle = platform_begin_file_write_utf8_file_path (utf8_full_file_name, &globalPerFrameArena);
+	Platform_File_Handle handle = platform_begin_file_write_utf8_file_path (utf8_full_file_name);
 
 	assert(!handle.has_errors);
 

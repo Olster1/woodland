@@ -168,3 +168,30 @@ static u8 *compileBuffer_toNullTerminateString(WL_Buffer *b) {
 
 	return result;
 }
+
+struct Compiled_Buffer_For_Save {
+	size_t size_in_bytes;
+	u8 *memory;
+};
+
+
+static Compiled_Buffer_For_Save compile_buffer_to_save_format(WL_Buffer *b, Memory_Arena *temp_arena) {
+	Compiled_Buffer_For_Save result = {};
+
+	result.memory = (u8 *)pushSize(temp_arena, b->bufferSize_inBytes); //NOTE: Have to think about this more if using a chunked linked list format for the buffer 
+
+
+
+	for(int i = 0; i < b->bufferSize_inUse_inBytes; i++) {
+		
+		if(i >= b->gapBuffer_startAt && i < b->gapBuffer_endAt) {
+			//NOTE: In Gap Buffer, don't write 
+		} else {
+			result.memory[result.size_in_bytes++] = b->bufferMemory[i];
+		}
+	}
+
+
+
+	return result;
+}
