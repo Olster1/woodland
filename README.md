@@ -1,4 +1,4 @@
-#Woodland Editor
+# Woodland Editor
 
 Aimed to be a text editor that:
 1. Loads Instantly on startup
@@ -14,6 +14,6 @@ Aimed to be a text editor that:
 It's really just for me as a fun project, something to practice using Direct3d and practice getting better at programming :)
 
 
-##If you encounter a crash bug: 
+## If you encounter a crash bug: 
 
 Go to %UserName%/AppData/Local/CrashDumps and get the crash file that corresponds to your crash. Please send to ollietheexplorer@gmail.com

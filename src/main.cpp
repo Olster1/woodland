@@ -556,10 +556,6 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 						open_buffer->scroll_dp.y = 0;
 					}
 
-					if(easyString_getSizeInBytes_utf8((char *)global_platformInput.textInput_utf8) > 0) {
-						open_buffer->is_up_to_date = false;
-					}
-
 					//NOTE: Ctrl P -> paste text from clipboard
 					if(global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown && global_platformInput.keyStates[PLATFORM_KEY_V].pressedCount > 0) 
 					{
@@ -589,6 +585,7 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 					if(global_platformInput.textInput_utf8[0] != '\0' && !global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown) {
 						addTextToBuffer(b, (char *)global_platformInput.textInput_utf8, b->cursorAt_inBytes);
 						open_buffer->should_scroll_to = true;
+						open_buffer->is_up_to_date = false;
 					}
 
 					// OutputDebugStringA((char *)global_platformInput.textInput_utf8);

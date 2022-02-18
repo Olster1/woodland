@@ -194,6 +194,19 @@ static void d3d_createShaderProgram_vs_ps(ID3D11Device1 *d3d11Device, LPCWSTR vs
 
 }
 
+static void d3d_create_shader_from_RC_file(ID3D11Device1 *d3d11Device, int id, d3d_shader_program *shader)
+{
+    HRSRC res = FindResource(GetModuleHandle(0), MAKEINTRESOURCE(id), RT_RCDATA);
+    HGLOBAL handle = LoadResource(0, res);
+    void* data = LockResource(handle);
+    DWORD size = SizeofResource(0, res);
+
+    LPCWSTR str = (LPCWSTR)data;
+
+    d3d_createShaderProgram_vs_ps(d3d11Device, str, str, shader);
+
+}
+
 static void getDefaultFrameBuffer_fromSwapChain(BackendRenderer *r) {
 	IDXGISwapChain1* d3d11SwapChain = r->d3d11SwapChain;
 	// Create Framebuffer Render Target for the swapchain (the default one that represents the screen)
@@ -329,10 +342,19 @@ static UINT backendRender_init(BackendRenderer *r, HWND hwnd) {
 
 	{ //NOTE: Create all shader programs
 
-	d3d_createShaderProgram_vs_ps(d3d11Device, L"..\\src\\sdf_font.hlsl", L"..\\src\\sdf_font.hlsl", &sdfFontShader);
-	d3d_createShaderProgram_vs_ps(d3d11Device, L"..\\src\\texture.hlsl", L"..\\src\\texture.hlsl", &textureShader);
-	d3d_createShaderProgram_vs_ps(d3d11Device, L"..\\src\\rect_outline.hlsl", L"..\\src\\rect_outline.hlsl", &rectOutlineShader);
+#if DEBUG_BUILD
+		
+		d3d_createShaderProgram_vs_ps(d3d11Device, L"..\\src\\sdf_font.hlsl", L"..\\src\\sdf_font.hlsl", &sdfFontShader);
+		d3d_createShaderProgram_vs_ps(d3d11Device, L"..\\src\\texture.hlsl", L"..\\src\\texture.hlsl", &textureShader);
+		d3d_createShaderProgram_vs_ps(d3d11Device, L"..\\src\\rect_outline.hlsl", L"..\\src\\rect_outline.hlsl", &rectOutlineShader);
+		
+#else 
+
+		d3d_createShaderProgram_vs_ps(d3d11Device, L".\\shaders\\sdf_font.hlsl", L".\\shaders\\sdf_font.hlsl", &sdfFontShader);
+		d3d_createShaderProgram_vs_ps(d3d11Device, L".\\shaders\\texture.hlsl", L".\\shaders\\texture.hlsl", &textureShader);
+		d3d_createShaderProgram_vs_ps(d3d11Device, L".\\shaders\\rect_outline.hlsl", L".\\shaders\\rect_outline.hlsl", &rectOutlineShader);
 	
+#endif
 	
 	}
 		
@@ -488,7 +510,7 @@ static UINT backendRender_init(BackendRenderer *r, HWND hwnd) {
 	}
 
 	// r->testTexture = d3d_loadFromFileToGPU_array(d3d11Device, "..\\src\\testTexture.png", 3);
-	global_testTexture = r->testTexture = d3d_loadFromFileToGPU(d3d11Device, "..\\src\\testTexture.png");
+	// global_testTexture = r->testTexture = d3d_loadFromFileToGPU(d3d11Device, "..\\src\\testTexture.png");
 
 
 	if(!global_white_texture) {

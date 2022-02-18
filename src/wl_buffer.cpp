@@ -139,31 +139,40 @@ static void removeTextFromBuffer(WL_Buffer *b, int bytesStart, int toRemoveCount
 
 #define WRITE_GAP_BUFFER_AS_HASH 0
 
-static u8 *compileBuffer_toNullTerminateString(WL_Buffer *b) {
+struct Compiled_Buffer_For_Drawing {
+	size_t size_in_bytes;
+	u8 *memory;
+
+	size_t cursor_at;
+	size_t shift_begin;
+	size_t shift_end;
+};
+
+
+static Compiled_Buffer_For_Drawing compileBuffer_toDraw(WL_Buffer *b, Memory_Arena *tempArena) {
+	Compiled_Buffer_For_Drawing result = {};
+
 	bool wroteCursor = false;
-	u8 *result = (u8 *)platform_alloc_memory(b->bufferSize_inBytes + 1, true); //NOTE: For null terminator and cursor spot
+	result.memory = (u8 *)pushSize(tempArena, b->bufferSize_inBytes + 1); //NOTE: For null terminator and cursor spot
 	int at = 0;
 
 	for(int i = 0; i < b->bufferSize_inUse_inBytes; i++) {
 		
-#if WRITE_GAP_BUFFER_AS_HASH
+		if(i == b->cursorAt_inBytes) { result.cursor_at = result.size_in_bytes; wroteCursor = true; }
+
 		if(i >= b->gapBuffer_startAt && i < b->gapBuffer_endAt) {
 			//NOTE: In Gap Buffer
-			result[at++] = '#';
 		} else {
-			result[at++] = b->bufferMemory[i];
+			result.memory[result.size_in_bytes++] = b->bufferMemory[i];
 		}
-#else 
-			result[at++] = b->bufferMemory[i];
-#endif
 	}
 
 
-	// if(!wroteCursor) {
-	// 	result[b->bufferSize_inUse_inBytes] = '|';
-	// }
+	if(!wroteCursor) {
+		result.cursor_at = result.size_in_bytes;
+	}
 
-	result[b->bufferSize_inBytes] = '\0'; //null terminate the buffer
+	result.memory[result.size_in_bytes] = '\0'; //null terminate the buffer
 
 
 	return result;

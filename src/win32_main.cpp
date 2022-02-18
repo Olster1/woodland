@@ -34,6 +34,8 @@
 
 #include "debug_stats.h"
 
+// #include "./win32/win32_threads.cpp"
+
 static DEBUG_stats global_debug_stats = {};
 
 
@@ -133,13 +135,13 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
         //NOTE: Clear out vunerable keys since we only track the down and we can miss the up message if we open a dialog window or player changes screen while holding the key then changes the screen
         
         {
-            //Docs: if the high-order bit is 1, the key is down; otherwise, it is up.
+            // Docs: if the high-order bit is 1, the key is down; otherwise, it is up.
 
-            // SHORT ctrl_state = GetKeyState(VK_CONTROL);
-            // SHORT shift_state = GetKeyState(VK_SHIFT);
+            SHORT ctrl_state = GetKeyState(VK_CONTROL);
+            SHORT shift_state = GetKeyState(VK_SHIFT);
 
-            // global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown = ctrl_state >> 15;
-            // global_platformInput.keyStates[PLATFORM_KEY_SHIFT].isDown = shift_state >> 15;
+            global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown = ctrl_state >> 15;
+            global_platformInput.keyStates[PLATFORM_KEY_SHIFT].isDown = shift_state >> 15;
 
         }
 
@@ -164,7 +166,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
     } else if(msg == WM_CHAR) {
         
         //NOTE: Dont add backspace to the buffer
-        if(wparam != VK_BACK) {
+        //TODO
+        if(wparam != VK_BACK && wparam != VK_CONTROL && wparam != VK_SHIFT && wparam != 19) {
 
             WCHAR utf16_character = (WCHAR)wparam;
 

@@ -69,7 +69,9 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 		draw_text(renderer, &font, name_str, window_bounds.minX + title_offset, -window_bounds.minY - title_offset, fontScale, editorState->color_palette.standard);
 	}
 
-	u8 *str = compileBuffer_toNullTerminateString(b);
+	// u8 *str = compileBuffer_toNullTerminateString(b);
+
+	Compiled_Buffer_For_Drawing buffer_to_draw = compileBuffer_toDraw(b, &globalPerFrameArena);
 
 	// OutputDebugStringA((LPCSTR)str);
 	// OutputDebugStringA((LPCSTR)"\n");
@@ -83,13 +85,13 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 
 	float max_x = 0;
 
-	float cursorX = 0;
-	float cursorY = 0;
+	float cursorX = startX;
+	float cursorY = startY;
 
 	bool newLine = true;
 
 	bool parsing = true;
-	EasyTokenizer tokenizer = lexBeginParsing(str, EASY_LEX_OPTION_NONE);
+	EasyTokenizer tokenizer = lexBeginParsing((char *)buffer_to_draw.memory, EASY_LEX_OPTION_NONE);
 
 	bool hit_start = true;
 	bool hit_end = true;
@@ -98,12 +100,15 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 
 	bool drawing = false;
 	//NOTE: Output the buffer
+
+	bool got_cursor = false;
 	
 
 	while(parsing) {
 		EasyToken token = lexGetNextToken(&tokenizer);
 
 		if(token.type == TOKEN_NULL_TERMINATOR) {
+			memory_offset++;
 			parsing = false;
 			break;
 		}
@@ -132,16 +137,10 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 		char *start_token = token.at;
 		while((at - start_token) < token.size) {
 
-			memory_offset = (s32)((char *)at - (char *)str); 
+			memory_offset = (s32)((char *)at - (char *)buffer_to_draw.memory); 
 
-	#define UTF8_ADVANCE 1
-	#if UTF8_ADVANCE
 			u32 rune = easyUnicode_utf8_codepoint_To_Utf32_codepoint(&((char *)at), true);
-	#else 
-			u32 rune = (u32)(*at);
-			at++;
 
-	#endif	
 			//NOTE: DEBUG PURPOSES
 			// GlyphInfo g = easyFont_getGlyph(&font, rune);
 			// char string[256];
@@ -172,9 +171,10 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 				}
 			}
 
-			if(memory_offset == b->cursorAt_inBytes) {
+			if(memory_offset == buffer_to_draw.cursor_at) {
 				cursorX = xAt;
 				cursorY = yAt;
+				got_cursor = true; 
 			}
 
 
@@ -239,6 +239,7 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 	if(is_active) {
 
 		if(memory_offset == b->cursorAt_inBytes) {
+			assert(!got_cursor);
 			cursorX = xAt;
 			cursorY = yAt;
 		}
@@ -304,6 +305,6 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 	}
 #endif
 
-	platform_free_memory(str);
+	// platform_free_memory(str);
 
 }

@@ -1,5 +1,6 @@
 # Folders
 /bin/*
+/release/*
 !/bin/SDL2.dll
 !/bin/SDL2.lib
 !/bin/SDL2main.lib
