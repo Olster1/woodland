@@ -20,6 +20,10 @@ static void try_begin_interaction(Ui_State *state, Ui_Type type, int window_id) 
 	}
 }
 
+static bool has_active_interaction(Ui_State *state) {
+	return (state->id.id >= 0);
+}
+
 static bool is_interaction_active(Ui_State *state, Ui_Type type) {
 	bool result = (state->id.id >= 0) && state->id.type == type;
 

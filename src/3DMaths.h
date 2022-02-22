@@ -1,3 +1,5 @@
+#include <float.h> //NOTE: For FLT_MAX
+
 static inline float get_abs_value(float value) {
 	if(value < 0) {
 		value *= -1.0f;

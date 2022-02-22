@@ -102,30 +102,33 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 	//NOTE: Output the buffer
 
 	bool got_cursor = false;
-	
+
+	size_t closest_click_buffer_point = 0;
+	float closest_click_distance = FLT_MAX;
+
+	bool tried_clicking = !has_active_interaction(&editorState->ui_state) && global_platformInput.keyStates[PLATFORM_MOUSE_LEFT_BUTTON].pressedCount > 0;
 
 	while(parsing) {
+		bool renderToken = true;
+
 		EasyToken token = lexGetNextToken(&tokenizer);
 
 		if(token.type == TOKEN_NULL_TERMINATOR) {
-			memory_offset++;
+			memory_offset = (s32)((char *)token.at - (char *)buffer_to_draw.memory); 
 			parsing = false;
+			renderToken = false;
 			break;
-		}
-
-		if(token.type == TOKEN_SPACE) {
-			int B = 0;
 		}
 
 		float4 text_color = editorState->color_palette.standard;
 
-		if(token.type == TOKEN_WORD || token.type == TOKEN_STRING || token.type == TOKEN_INTEGER || token.type == TOKEN_FLOAT) {		
+		if(token.type == TOKEN_STRING || token.type == TOKEN_INTEGER || token.type == TOKEN_FLOAT) {		
 			text_color = editorState->color_palette.variable;
 		} else if(token.type == TOKEN_OPEN_BRACKET || token.type == TOKEN_CLOSE_BRACKET || token.type == TOKEN_OPEN_SQUARE_BRACKET || token.type == TOKEN_CLOSE_SQUARE_BRACKET) {		
 			text_color = editorState->color_palette.bracket;
 		} else if(token.type == TOKEN_FUNCTION) {		
 			text_color = editorState->color_palette.function;
-		} else if(token.type == TOKEN_FOR_KEYWORD || token.type == TOKEN_IF_KEYWORD || token.type == TOKEN_WHILE_KEYWORD || token.type == TOKEN_ELSE || token.type == TOKEN_RETURN_KEYWORD || token.type == TOKEN_BREAK_KEYWORD || token.type == TOKEN_STRUCT_KEYWORD || token.type == TOKEN_TYPEDEF_KEYWORD) {		
+		} else if(token.isKeyword || token.isType) {		
 			text_color = editorState->color_palette.keyword;
 		} else if(token.type == TOKEN_COMMENT) {		
 			text_color = editorState->color_palette.comment;
@@ -133,9 +136,10 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 			text_color = editorState->color_palette.preprocessor;
 		}
 
+
 		char *at = token.at;
 		char *start_token = token.at;
-		while((at - start_token) < token.size) {
+		while((at - start_token) < token.size && renderToken) {
 
 			memory_offset = (s32)((char *)at - (char *)buffer_to_draw.memory); 
 
@@ -153,10 +157,21 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 
 			if(yAt < 0 && yAt >= -(window_bounds.maxY + font.fontHeight)) {
 				drawing = true;
+
+
+				if(tried_clicking) {
+					float2 distance = make_float2(xAt - mouse_point_top_left_origin.x, yAt + mouse_point_top_left_origin.y); 
+					float distance_sqr = distance.x*distance.x + distance.y*distance.y;
+
+					if(distance_sqr <= closest_click_distance) {
+						closest_click_distance = distance_sqr;
+						closest_click_buffer_point = memory_offset;
+					}
+				}
+
 			} else {
 				drawing = false;
 			}
-
 
 			//NOTE: Draw selectable overlay
 			if(is_active && editorState->selectable_state.is_active) {
@@ -182,11 +197,35 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 				yAt -= font.fontHeight*fontScale;
 				xAt = startX;
 				newLine = true;
+
+				//NOTE: Newline token so we have to check the cursor again and skip the extra newline
+				if(isNewlineTokenWindowsType(token)) {
+					 assert(token.size == 2);
+
+					//NOTE: Check the cursor location again
+					memory_offset = (s32)((char *)at - (char *)buffer_to_draw.memory); 
+					if(memory_offset == buffer_to_draw.cursor_at) {
+					 	cursorX = xAt;
+					 	cursorY = yAt;
+					 	got_cursor = true; 
+					}
+
+					//NOTE: Move past the newline character
+					at++;
+				}
+
+				if(yAt < -window_bounds.maxY) {
+					drawing = false;
+				}
 				
 			} else if(drawing) {
 
-
-				GlyphInfo g = easyFont_getGlyph(&font, rune);
+				if(rune == '\t') {
+					rune = (u32)' ';
+					factor = 4.0f;
+				} 
+				
+				GlyphInfo g = easyFont_getGlyph(&font, rune);	
 
 				assert(g.unicodePoint == rune);
 
@@ -238,11 +277,22 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 	//NOTE: Draw the cursor
 	if(is_active) {
 
-		if(memory_offset == b->cursorAt_inBytes) {
+		if(tried_clicking) {
+			if(closest_click_distance != FLT_MAX) {
+				b->cursorAt_inBytes = convert_compiled_byte_point_to_buffer_byte_point(b, closest_click_buffer_point);
+			}
+		}
+		
+
+		if(memory_offset == buffer_to_draw.cursor_at) {
 			assert(!got_cursor);
 			cursorX = xAt;
 			cursorY = yAt;
+
+			got_cursor = true;
 		}
+
+		assert(got_cursor);
 
 		pushShader(renderer, &textureShader);
 

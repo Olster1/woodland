@@ -204,3 +204,30 @@ static Compiled_Buffer_For_Save compile_buffer_to_save_format(WL_Buffer *b, Memo
 
 	return result;
 }
+
+static size_t convert_compiled_byte_point_to_buffer_byte_point(WL_Buffer *b, size_t cursor_byte_in_compiled) {
+
+	size_t result = 0;
+
+	bool found = false;
+
+	size_t byte_at = 0;
+	for(int i = 0; i < b->bufferSize_inUse_inBytes && !found; i++) {
+
+		if(byte_at == cursor_byte_in_compiled) {
+			result = i;
+			found = true;
+			break;
+		}
+		
+		if(i >= b->gapBuffer_startAt && i < b->gapBuffer_endAt) {
+			//NOTE: In Gap Buffer, don't write 
+		} else {
+			byte_at++;
+		}
+	}
+
+	assert(result >= 0);
+
+	return result;
+}

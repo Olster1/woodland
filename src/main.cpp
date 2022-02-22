@@ -98,10 +98,21 @@ typedef struct {
 
 	char *save_file_location_utf8;
 
+	size_t move_vertical_rune_at;
+
 } EditorState;
 
 
 #include "wl_window.cpp"
+
+static bool has_utf8_BOM(u8 *txt) {
+	bool result = false;
+	if(txt[0] == (u8)239 && txt[1] == (u8)187 && txt[2] == (u8)191) {
+		result = true;
+	}
+
+	return result;
+}
 
 static int open_new_backing_buffer(EditorState *editorState) {
 	assert(editorState->buffer_count_used < MAX_BUFFER_COUNT);
@@ -202,7 +213,16 @@ static void open_file_and_add_to_window(EditorState *editorState, char *file_nam
 
 		WL_Buffer *b = &open_buffer->buffer;
 
-		addTextToBuffer(b, (char *)data, b->cursorAt_inBytes);
+		char *start_of_text = (char *)data;
+
+		if(data_size > 3 && has_utf8_BOM((u8 *)start_of_text)) {
+			start_of_text += 3;
+			//NOTE: Is utf8 
+		} 
+		//TODO: eventually we'll want to check all different encodings
+
+
+		addTextToBuffer(b, start_of_text, b->cursorAt_inBytes);
 
 		open_buffer->file_name_utf8 = (char *)platform_wide_char_to_utf8_allocates_on_heap(file_name_wide_char);
 		open_buffer->name = getFileLastPortion(open_buffer->file_name_utf8);
@@ -216,7 +236,7 @@ static void open_file_and_add_to_window(EditorState *editorState, char *file_nam
 }
 
 
-static void DEBUG_draw_stats(EditorState *editorState, Renderer *renderer, Font *font, float windowWidth, float windowHeight) {
+static void DEBUG_draw_stats(EditorState *editorState, Renderer *renderer, Font *font, float windowWidth, float windowHeight, float dt) {
 
 	float16 orthoMatrix = make_ortho_matrix_top_left_corner(windowWidth, windowHeight, MATH_3D_NEAR_CLIP_PlANE, MATH_3D_FAR_CLIP_PlANE);
 	pushMatrix(renderer, orthoMatrix);
@@ -254,6 +274,7 @@ static void DEBUG_draw_stats(EditorState *editorState, Renderer *renderer, Font 
 	// DEBUG_draw_stats_FLOAT_MACRO("Target Scroll: ", w->scroll_target_pos.x, w->scroll_target_pos.y);
 
 	DEBUG_draw_stats_FLOAT_MACRO("mouse scroll x ", global_platformInput.mouseX / windowWidth, global_platformInput.mouseY / windowHeight);
+	DEBUG_draw_stats_FLOAT_MACRO("dt for frame ", dt, dt);
 
 }
 
@@ -270,7 +291,11 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 		editorState->active_window_index = 0;
 		editorState->mode = MODE_EDIT_BUFFER;
 
+		#if DEBUG_BUILD
 		editorState->font = initFont("..\\fonts\\liberation-mono.ttf");
+		#else
+		editorState->font = initFont(".\\fonts\\liberation-mono.ttf");
+		#endif
 
 		editorState->fontScale = 0.6f;
 		editorState->buffer_count_used = 0;
@@ -282,6 +307,8 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 		editorState->save_file_location_utf8 = save_file_location_utf8_only_use_on_inititalize;
 		editorState->settings_to_save = save_settings_only_use_on_inititalize;
 
+
+		editorState->move_vertical_rune_at = -1; //NOTE: For unintialised
  		
 		editorState->ui_state.id.id = -1;
 
@@ -289,7 +316,7 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 			editorState->color_palette.background = color_hexARGBTo01(0xFF161616);
 			editorState->color_palette.standard =  color_hexARGBTo01(0xFFA08563);
 			editorState->color_palette.variable = color_hexARGBTo01(0xFF6B8E23);
-			editorState->color_palette.bracket = color_hexARGBTo01(0xFFA08563);
+			editorState->color_palette.bracket = color_hexARGBTo01(0xFFDAB98F);
 			editorState->color_palette.function = color_hexARGBTo01(0xFF008563);
 			editorState->color_palette.keyword = color_hexARGBTo01(0xFFCD950C);
 			editorState->color_palette.comment = color_hexARGBTo01(0xFF7D7D7D);
@@ -356,7 +383,12 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 	//NOTE: Ctrl + -> zoom in -> change this to have the windows lag 
 	if(global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown && global_platformInput.keyStates[PLATFORM_KEY_PLUS].pressedCount > 0) 
 	{
-		editorState->fontScale += 0.25f;
+
+		if(editorState->fontScale < 0.5f) {
+			editorState->fontScale *= 1.1f;
+		} else {
+			editorState->fontScale += 0.25f;
+		}
 
 		if(editorState->fontScale > 5.0f) {
 			editorState->fontScale = 5.0f;
@@ -373,11 +405,14 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 	//NOTE: Ctrl - -> zoom out -> change this to have the windows lag 
 	if(global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown && global_platformInput.keyStates[PLATFORM_KEY_MINUS].pressedCount > 0) 
 	{
-		editorState->fontScale -= 0.25f;
-
 		if(editorState->fontScale < 0.5f) {
-			editorState->fontScale = 0.5f;
+			editorState->fontScale *= 0.9f;
+		} else {
+			editorState->fontScale -= 0.25f;	
 		}
+		
+
+		
 	}
 
 	//NOTE: Ctrl X -new window
@@ -387,7 +422,7 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 	}
 
 
-	//NOTE: Ctrl + O -> open file 
+	//NOTE: Ctrl O -> open file 
 	if(global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown && global_platformInput.keyStates[PLATFORM_KEY_O].pressedCount > 0) 
 	{	
 		//NOTE: Make sure free the string
@@ -609,10 +644,18 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 					    }
 
 					    if(command == PLATFORM_KEY_LEFT) {
-					    	u32 bytesOfPrevRune = 1;
+					    	
 					    	endGapBuffer(b);
+
+					    	u32 bytesOfPrevRune = 1;
+
 					        //NOTE: Move cursor left 
 					        if(b->cursorAt_inBytes > 0) {
+
+					        	//NOTE: Windows style newline
+		        	            if(b->cursorAt_inBytes >= 2 && b->bufferMemory[b->cursorAt_inBytes - 2] == '\r' && b->bufferMemory[b->cursorAt_inBytes - 1] == '\n') {
+		        	            	bytesOfPrevRune = 2;
+		        	            }
 
 					        	if(global_platformInput.keyStates[PLATFORM_KEY_SHIFT].isDown) 
 					        	{
@@ -640,6 +683,12 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 					    	endGapBuffer(b);
 					        //NOTE: Move cursor right 
 					        if(b->cursorAt_inBytes < b->bufferSize_inUse_inBytes) {
+
+					        	//NOTE: Windows style newline
+					        	if(b->cursorAt_inBytes < (b->bufferSize_inUse_inBytes - 1) && b->bufferMemory[b->cursorAt_inBytes] == '\r' && b->bufferMemory[b->cursorAt_inBytes + 1] == '\n') {
+					        		bytesOfNextRune = 2;
+					        	}
+
 					        	if(global_platformInput.keyStates[PLATFORM_KEY_SHIFT].isDown) 
 					        	{
 
@@ -692,7 +741,7 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 #if DEBUG_BUILD
 	if(editorState->draw_debug_memory_stats) {
 		renderer_defaultScissors(renderer, windowWidth, windowHeight);
-		DEBUG_draw_stats(editorState, renderer, &editorState->font, windowWidth, windowHeight);
+		DEBUG_draw_stats(editorState, renderer, &editorState->font, windowWidth, windowHeight, dt);
 	}
 #endif
 

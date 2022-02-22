@@ -512,10 +512,15 @@ static UINT backendRender_init(BackendRenderer *r, HWND hwnd) {
 	// r->testTexture = d3d_loadFromFileToGPU_array(d3d11Device, "..\\src\\testTexture.png", 3);
 	// global_testTexture = r->testTexture = d3d_loadFromFileToGPU(d3d11Device, "..\\src\\testTexture.png");
 
-
+#if DEBUG_BUILD
 	if(!global_white_texture) {
 		global_white_texture = (void *)d3d_loadFromFileToGPU(d3d11Device, "..\\src\\white_texture.png");
 	}
+#else 
+	if(!global_white_texture) {
+		global_white_texture = (void *)d3d_loadFromFileToGPU(d3d11Device, ".\\white_texture.png");
+	}
+#endif
 
 
 	return 0;

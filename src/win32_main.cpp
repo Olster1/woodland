@@ -87,6 +87,16 @@ static u64 platform_get_memory_page_size() {
     return w32_system_info.dwPageSize;
 }
 
+static bool win32_isValidText(u16 wparam) {
+    bool result = true;
+    if(wparam < 9 || (14 <= wparam && wparam <= 27)) {
+        
+        result = false;
+    }
+
+     return result;
+}
+
 
 //NOTE: Used by the game layer
 static void *platform_alloc_memory_pages(size_t size) {
@@ -167,7 +177,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
         
         //NOTE: Dont add backspace to the buffer
         //TODO
-        if(wparam != VK_BACK && wparam != VK_CONTROL && wparam != VK_SHIFT && wparam != 19) {
+        if(win32_isValidText((u16)wparam)) {
 
             WCHAR utf16_character = (WCHAR)wparam;
 

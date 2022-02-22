@@ -26,6 +26,7 @@ bool lexMatchString(char *A, char *B) {
     return res;
 }
 
+
 #define EASY_LEX_TOKEN_TYPE(FUNC) \
 FUNC(TOKEN_UNINITIALISED) \
 FUNC(TOKEN_WORD) \
@@ -42,8 +43,13 @@ FUNC(TOKEN_BOOL_TYPE) \
 FUNC(TOKEN_IF_KEYWORD) \
 FUNC(TOKEN_WHILE_KEYWORD) \
 FUNC(TOKEN_FOR_KEYWORD) \
+FUNC(TOKEN_NEW_KEYWORD) \
 FUNC(TOKEN_RETURN_KEYWORD) \
 FUNC(TOKEN_BREAK_KEYWORD) \
+FUNC(TOKEN_NAMESPACE_KEYWORD) \
+FUNC(TOKEN_CLASS_KEYWORD) \
+FUNC(TOKEN_PUBLIC_KEYWORD) \
+FUNC(TOKEN_PRIVATE_KEYWORD) \
 FUNC(TOKEN_STRUCT_KEYWORD) \
 FUNC(TOKEN_SEMI_COLON) \
 FUNC(TOKEN_COLON) \
@@ -76,6 +82,7 @@ FUNC(TOKEN_LESS_THAN_OR_EQUAL_TO)\
 FUNC(TOKEN_SPACE)\
 FUNC(TOKEN_FUNCTION)\
 FUNC(TOKEN_PREPROCESSOR)\
+FUNC(TOKEN_CASE_KEYWORD)\
 FUNC(TOKEN_ELSE)\
 FUNC(TOKEN_TYPEDEF_KEYWORD)\
 
@@ -89,6 +96,9 @@ static char *LexTokenTypeStrings[] = { EASY_LEX_TOKEN_TYPE(STRING) };
 
 typedef struct {
     char *at;
+
+    bool isKeyword;
+    bool isType; 
     
     EasyTokenType type;
     int size;
@@ -104,6 +114,15 @@ typedef struct {
         };
     };
 } EasyToken;
+
+
+static inline bool isNewlineTokenWindowsType(EasyToken token) {
+    bool result = false;
+    if(token.type == TOKEN_NEWLINE && token.at[0] == '\r' && token.at[1] == '\n') {
+        result = true;
+    }
+    return result;
+}
 
 char *lexEatWhiteSpace(char *at) {
     while(*at == ' ' || *at == '\r' || *at == '\n' || *at == '\t') {
@@ -229,6 +248,7 @@ EasyToken lexGetToken_(EasyTokenizer *tokenizer, bool advanceWithToken) {
             token = lexInitToken(TOKEN_NEWLINE, at, 1, *lineNumber);
             if(at[0] == '\r' && at[1] == '\n') {
                 at++;
+                token.size++;
             }
             at++;
         } break;
@@ -305,10 +325,17 @@ EasyToken lexGetToken_(EasyTokenizer *tokenizer, bool advanceWithToken) {
         case '#': {
             token = lexInitToken(TOKEN_HASH, at, 1, *lineNumber);
             at++;
-            while(*at && (lexIsNumeric(*at) || lexIsAlphaNumeric(*at))) {
+
+            if(lexIsNumeric(*at)) {
                 token.type = TOKEN_HASH_NUMBER;
+            } else if(lexIsAlphaNumeric(*at)) {
+                token.type = TOKEN_PREPROCESSOR;
+            }
+
+            while(*at && (lexIsNumeric(*at) || lexIsAlphaNumeric(*at))) {
                 at++;
             }
+
             token.size = (at - token.at);
         } break;
         case '\'': 
@@ -367,9 +394,11 @@ EasyToken lexGetToken_(EasyTokenizer *tokenizer, bool advanceWithToken) {
                     at++;
                 }
                 token.size = at - token.at;
+                token.isKeyword = true;
 
-                if(at[0] == '(') {
-                    token.type = TOKEN_FUNCTION;
+                    
+                if(easyString_stringsMatch_null_and_count("new", token.at, token.size)) {
+                    token.type = TOKEN_NEW_KEYWORD;
                 } else if(easyString_stringsMatch_null_and_count("for", token.at, token.size)) {
                     token.type = TOKEN_FOR_KEYWORD;
                 } else if(easyString_stringsMatch_null_and_count("else", token.at, token.size)) {
@@ -386,7 +415,31 @@ EasyToken lexGetToken_(EasyTokenizer *tokenizer, bool advanceWithToken) {
                     token.type = TOKEN_BREAK_KEYWORD;
                 } else if(easyString_stringsMatch_null_and_count("typedef", token.at, token.size)) {
                     token.type = TOKEN_TYPEDEF_KEYWORD;
+                } else if(easyString_stringsMatch_null_and_count("namespace", token.at, token.size)) {
+                    token.type = TOKEN_NAMESPACE_KEYWORD;
+                } else if(easyString_stringsMatch_null_and_count("public", token.at, token.size)) {
+                    token.type = TOKEN_PUBLIC_KEYWORD;
+                } else if(easyString_stringsMatch_null_and_count("private", token.at, token.size)) {
+                    token.type = TOKEN_PRIVATE_KEYWORD;
+                } else if(easyString_stringsMatch_null_and_count("case", token.at, token.size)) {
+                    token.type = TOKEN_CASE_KEYWORD;
+                } else if(easyString_stringsMatch_null_and_count("class", token.at, token.size)) {
+                    token.type = TOKEN_CLASS_KEYWORD;
+                } else if(easyString_stringsMatch_null_and_count("float", token.at, token.size)) {
+                    token.isType = true;
+                } else if(easyString_stringsMatch_null_and_count("int", token.at, token.size)) {
+                    token.isType = true;
+                } else if(easyString_stringsMatch_null_and_count("bool", token.at, token.size)) {
+                    token.isType = true;
+                } else if(easyString_stringsMatch_null_and_count("double", token.at, token.size)) {
+                    token.isType = true;
+                } else if(at[0] == '(') {
+                    token.type = TOKEN_FUNCTION;
+                    token.isKeyword = false;
+                } else {
+                    token.isKeyword = false;
                 }
+                
                 
             } else if(lexIsNumeric(*at) || *at == '-') {
                 token = lexInitToken(TOKEN_INTEGER, at, 1, *lineNumber);
@@ -465,10 +518,6 @@ EasyToken lexGetToken_(EasyTokenizer *tokenizer, bool advanceWithToken) {
     assert(token.at);
     if(advanceWithToken) { tokenizer->src = at; }
     
-    if(token.type == TOKEN_STRING) {
-        token.size -= 2;
-        token.at += 1;
-    }
     return token;
 }
 
