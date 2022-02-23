@@ -3,7 +3,7 @@ cls
 
 REM compile the icon into a .res file
 REM uncomment line below to compile the file
-RC ./myres.rc
+RC -fo ../bin/myres.res ./win32/myres.rc 
 
 IF NOT EXIST ..\bin mkdir ..\bin
 pushd ..\bin
@@ -17,7 +17,7 @@ set commonLinkFlags=user32.lib Comdlg32.lib d3d11.lib d3dcompiler.lib Shell32.li
 
 
 @echo Debug Build
-cl /DDEBUG_BUILD=1 %debugCompilerFlags% -Od ..\src\win32_main.cpp -FeWoodland /link %commonLinkFlags% ../src/myres.res
+cl /DDEBUG_BUILD=1 %debugCompilerFlags% -Od ..\src\win32\win32_main.cpp -FeWoodland /link %commonLinkFlags% ./myres.res
 
 
 rem This is the Release option

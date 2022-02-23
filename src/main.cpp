@@ -3,6 +3,7 @@
 #include "lex_utf8.h"
 #include "color.cpp"
 #include "wl_buffer.cpp"
+#include "wl_ast.cpp"
 #include "font.cpp"
 #include "ui.cpp"
 #include "selectable.cpp"
@@ -26,13 +27,9 @@ inline char *easy_createString_printf(Memory_Arena *arena, char *formatString, .
     return strArray;
 }
 
-
-
 /*
 Next:
 
-2. Convert lex.cpp to use runes instead of chars
-3. Create new windows and be able to resize them
 
 */
 
@@ -62,10 +59,6 @@ typedef struct {
 
 	int buffer_index; //NOTE: index into all the active buffers 
 } WL_Window;
-
-
-
-
 
 typedef struct {
 	bool initialized;

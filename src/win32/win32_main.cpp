@@ -10,10 +10,10 @@
 #include <wchar.h>
 
 #define STB_IMAGE_IMPLEMENTATION
-#include "../libs/stb_image.h"
+#include "../../libs/stb_image.h"
 
 #define STB_TRUETYPE_IMPLEMENTATION 
-#include "../libs/stb_truetype.h"
+#include "../../libs/stb_truetype.h"
 
 
 #include <stdint.h> //for the type uint8_t for our text input buffer
@@ -26,13 +26,13 @@
 #define DEFAULT_WINDOW_HEIGHT             720
 #define PERMANENT_STORAGE_SIZE  Megabytes(32)
 
-#include "platform.h"
+#include "../platform.h"
 
 #define EASY_STRING_IMPLEMENTATION 1
-#include "easy_string_utf8.h"
+#include "../easy_string_utf8.h"
 
 
-#include "debug_stats.h"
+#include "../debug_stats.h"
 
 // #include "./win32/win32_threads.cpp"
 
@@ -396,7 +396,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
     return result;
 } 
 
-#include "memory_arena.cpp"
+#include "../memory_arena.cpp"
 
 //TODO: I don't know if this is meant to be WCHAR or can do straight utf8
 
@@ -843,7 +843,7 @@ static bool Platform_LoadEntireFile_utf8(char *filename_utf8, void **data, size_
 
 }
 
-#include "3DMaths.h"
+#include "../3DMaths.h"
 
 static float2 platform_get_window_xy_pos() {
     float2 result = make_float2(0, 0);
@@ -856,12 +856,12 @@ static float2 platform_get_window_xy_pos() {
 }
 
 
-#include "render.c"
+#include "../render.c"
 
 
-#include "d3d_render.cpp"
+#include "../render_backend/d3d_render.cpp"
 
-#include "main.cpp"
+#include "../main.cpp"
 
 
 int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int cmdshow)

@@ -69,6 +69,9 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 		draw_text(renderer, &font, name_str, window_bounds.minX + title_offset, -window_bounds.minY - title_offset, fontScale, editorState->color_palette.standard);
 	}
 
+
+	// EasyAst ast = easyAst_generateAst(, &globalPerFrameArena);
+
 	// u8 *str = compileBuffer_toNullTerminateString(b);
 
 	Compiled_Buffer_For_Drawing buffer_to_draw = compileBuffer_toDraw(b, &globalPerFrameArena);

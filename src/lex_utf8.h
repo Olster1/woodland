@@ -427,12 +427,22 @@ EasyToken lexGetToken_(EasyTokenizer *tokenizer, bool advanceWithToken) {
                     token.type = TOKEN_CLASS_KEYWORD;
                 } else if(easyString_stringsMatch_null_and_count("float", token.at, token.size)) {
                     token.isType = true;
+                    token.isKeyword = false;
+                } else if(easyString_stringsMatch_null_and_count("true", token.at, token.size)) {
+                    token.isType = true;
+                    token.isKeyword = false;
+                } else if(easyString_stringsMatch_null_and_count("false", token.at, token.size)) {
+                    token.isType = true;
+                    token.isKeyword = false;
                 } else if(easyString_stringsMatch_null_and_count("int", token.at, token.size)) {
                     token.isType = true;
+                    token.isKeyword = false;
                 } else if(easyString_stringsMatch_null_and_count("bool", token.at, token.size)) {
                     token.isType = true;
+                    token.isKeyword = false;
                 } else if(easyString_stringsMatch_null_and_count("double", token.at, token.size)) {
                     token.isType = true;
+                    token.isKeyword = false;
                 } else if(at[0] == '(') {
                     token.type = TOKEN_FUNCTION;
                     token.isKeyword = false;

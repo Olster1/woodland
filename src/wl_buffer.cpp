@@ -231,3 +231,25 @@ static size_t convert_compiled_byte_point_to_buffer_byte_point(WL_Buffer *b, siz
 
 	return result;
 }
+
+// static size_t getRuneCountForNewLineToCursor(WL_Buffer *b) {
+
+// 	//NOTE: Have to make sure the buffer isn't overrun
+// 	int bytes_till_start = b->cursorAt_inBytes; 
+
+// 	size_t result = -1;
+// 	bool found = false;
+
+// 	while(bytes_till_start != 0 && !found) {
+
+// 		if(b->bufferMemory[bytes_till_start] == '\n') { //NOTE: looking for new line
+// 			result = bytes_till_start;
+// 			found = true;
+// 			break;
+// 		}
+
+// 		bytes_till_start--;
+// 	}
+
+// 	return result; 
+// }

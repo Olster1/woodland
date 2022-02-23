@@ -344,9 +344,9 @@ static UINT backendRender_init(BackendRenderer *r, HWND hwnd) {
 
 #if DEBUG_BUILD
 		
-		d3d_createShaderProgram_vs_ps(d3d11Device, L"..\\src\\sdf_font.hlsl", L"..\\src\\sdf_font.hlsl", &sdfFontShader);
-		d3d_createShaderProgram_vs_ps(d3d11Device, L"..\\src\\texture.hlsl", L"..\\src\\texture.hlsl", &textureShader);
-		d3d_createShaderProgram_vs_ps(d3d11Device, L"..\\src\\rect_outline.hlsl", L"..\\src\\rect_outline.hlsl", &rectOutlineShader);
+		d3d_createShaderProgram_vs_ps(d3d11Device, L"..\\src\\shaders\\sdf_font.hlsl", L"..\\src\\shaders\\sdf_font.hlsl", &sdfFontShader);
+		d3d_createShaderProgram_vs_ps(d3d11Device, L"..\\src\\shaders\\texture.hlsl", L"..\\src\\shaders\\texture.hlsl", &textureShader);
+		d3d_createShaderProgram_vs_ps(d3d11Device, L"..\\src\\shaders\\rect_outline.hlsl", L"..\\src\\shaders\\rect_outline.hlsl", &rectOutlineShader);
 		
 #else 
 
@@ -514,7 +514,7 @@ static UINT backendRender_init(BackendRenderer *r, HWND hwnd) {
 
 #if DEBUG_BUILD
 	if(!global_white_texture) {
-		global_white_texture = (void *)d3d_loadFromFileToGPU(d3d11Device, "..\\src\\white_texture.png");
+		global_white_texture = (void *)d3d_loadFromFileToGPU(d3d11Device, "..\\src\\images\\white_texture.png");
 	}
 #else 
 	if(!global_white_texture) {
