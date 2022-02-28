@@ -1,11 +1,12 @@
 
 typedef struct {
-	int cursorAt_inBytes;
-	int markAt_inBytes;
+	s64 cursorAt_inBytes;
+	s64 markAt_inBytes;
 	bool markActive;
 
 	u32 bufferSize_inUse_inBytes;
 	u32 bufferSize_inBytes;
+	//NOTE: This DOESN'T include a null terminator 
 	u8 *bufferMemory;
 
 

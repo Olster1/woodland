@@ -51,6 +51,8 @@ typedef struct {
 
 	float2 max_scroll_bounds;
 
+	EasyAst ast;
+
 	WL_Buffer buffer;
 } WL_Open_Buffer;
 
@@ -186,7 +188,10 @@ enum Open_File_Into_Buffer_Type {
 	OPEN_FILE_INTO_CURRENT_WINDOW,
 };
 
-static void open_file_and_add_to_window(EditorState *editorState, char *file_name_wide_char, Open_File_Into_Buffer_Type open_type) {
+static WL_Open_Buffer *open_file_and_add_to_window(EditorState *editorState, char *file_name_wide_char, Open_File_Into_Buffer_Type open_type) {
+
+	WL_Open_Buffer *result = 0;
+
 	size_t data_size = 0;
 	void *data = 0;
 	if(Platform_LoadEntireFile_wideChar(file_name_wide_char, &data, &data_size)) {
@@ -223,9 +228,15 @@ static void open_file_and_add_to_window(EditorState *editorState, char *file_nam
 
 		platform_free_memory(data);
 
+		result = open_buffer;
+
+		open_buffer->ast = easyAst_generateAst((char *)b->bufferMemory, &global_long_term_arena);
+
 	} else {
 		// assert(!"Couldn't open file");
 	}
+
+	return result;
 }
 
 
@@ -316,6 +327,10 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 			editorState->color_palette.preprocessor = color_hexARGBTo01(0xFFDAB98F);
 		}
 
+#if DEBUG_BUILD
+		DEBUG_runUnitTestForLookBackTokens();
+		DEBUG_runUnitTestForLookForwardTokens();
+#endif
 		
 
 	} else {
@@ -424,6 +439,7 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 		open_file_and_add_to_window(editorState, fileNameToOpen_utf16, OPEN_FILE_INTO_CURRENT_WINDOW);
 
 		end_select(&editorState->selectable_state);
+		
 	}
 
 
@@ -642,6 +658,14 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 
 					    	u32 bytesOfPrevRune = 1;
 
+					    	if(global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown) {
+					    		EasyToken token = peekTokenBackwards_tokenNotComplete((char *)(b->bufferMemory + (b->cursorAt_inBytes - 1)), (char *)b->bufferMemory);
+					    	
+					    		if(token.type != TOKEN_UNINITIALISED) {
+					    			bytesOfPrevRune = token.size;
+					    		}
+					    	}
+
 					        //NOTE: Move cursor left 
 					        if(b->cursorAt_inBytes > 0) {
 
@@ -672,7 +696,18 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 					    }
 
 					    if(command == PLATFORM_KEY_RIGHT) {
+
 					    	u32 bytesOfNextRune = 1;
+
+					    	if(global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown) {
+
+					    		EasyToken token = peekTokenForward_tokenNotComplete((char *)(b->bufferMemory + (b->cursorAt_inBytes)), (char *)(b->bufferMemory + (b->bufferSize_inUse_inBytes)));
+
+					    		if(token.type != TOKEN_UNINITIALISED) {
+					    			bytesOfNextRune = token.size;
+					    		}
+					    	}
+					    	
 					    	endGapBuffer(b);
 					        //NOTE: Move cursor right 
 					        if(b->cursorAt_inBytes < b->bufferSize_inUse_inBytes) {
