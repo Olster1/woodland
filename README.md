@@ -29,35 +29,35 @@ It's really just for me as a fun project, something to practice using Direct3d a
 - [x] Saves windows size from last session in AppData folder
 
 ## Near Future (roughly in order of priority)
-- [] Shift highlighting of multiple lines to cut, copy & delete text - both with Shift-Arrows and Mouse Click-Drag
-- [] Up and down arrows to move line by line
-- [] Robust Undo/Redo 
+- [ ] Shift highlighting of multiple lines to cut, copy & delete text - both with Shift-Arrows and Mouse Click-Drag
+- [ ] Up and down arrows to move line by line
+- [ ] Robust Undo/Redo 
 
 
-- [] Ctrl-Find in an open buffer (not fuzzy search)
-- [] Ctrl-Find in a whole project (not fuzzy search)
-- [] Recomend code based on what's in the buffer already (drop down of choices (is fuzzy) that you can choose with arrow keys, like sublime text)
-- [] Ctrl-G jump to line in buffer
-- [] Error highlightling when brackets or parenthesis don't match
-- [] Vertical Guidlines to match up scope levels 
+- [ ] Ctrl-Find in an open buffer (not fuzzy search)
+- [ ] Ctrl-Find in a whole project (not fuzzy search)
+- [ ] Recomend code based on what's in the buffer already (drop down of choices (is fuzzy) that you can choose with arrow keys, like sublime text)
+- [ ] Ctrl-G jump to line in buffer
+- [ ] Error highlightling when brackets or parenthesis don't match
+- [ ] Vertical Guidlines to match up scope levels 
 
-- [] Chunk the buffer to optimize editing and rendering the buffer
-- [] Open buffer that has been loaded (ctrl - b -> open a dropdown of all open buffers)
-- [] Full Unicode support (trying to account for it as I go, but not fully and sure to be mistakes and edge cases not accounting for)
-- [] Utf-16 rendering (have to find a way of detecting if it is a utf-16 file - maybe just look for the BOM header, also have to write a utf-16 decoded which doesn't seem to hard)
-- [] Have concept of project that is remembered (just a folder, store previous projects in AppData)
-- [] More intuitive GUI than 4Coder for choosing a open buffer and navigating a project (more like sublime text)
-- [] Detect when a file should just be rendered as hex code (binary files) instead of text
-- [] Choose Color themes and build your own easily with GUI color picker that changes text in real-time
+- [ ] Chunk the buffer to optimize editing and rendering the buffer
+- [ ] Open buffer that has been loaded (ctrl - b -> open a dropdown of all open buffers)
+- [ ] Full Unicode support (trying to account for it as I go, but not fully and sure to be mistakes and edge cases not accounting for)
+- [ ] Utf-16 rendering (have to find a way of detecting if it is a utf-16 file - maybe just look for the BOM header, also have to write a utf-16 decoded which doesn't seem to hard)
+- [ ] Have concept of project that is remembered (just a folder, store previous projects in AppData)
+- [ ] More intuitive GUI than 4Coder for choosing a open buffer and navigating a project (more like sublime text)
+- [ ] Detect when a file should just be rendered as hex code (binary files) instead of text
+- [ ] Choose Color themes and build your own easily with GUI color picker that changes text in real-time
 
 
 ## Longer Support
-- [] Multiple Active Cursors in a buffer
-- [] More encodings than utf-8,hex & utf-16. For example Greek (Windows 1253), Celtic (ISO-8859-14)
-- [] More Syntax highlighting for different languages
-- [] Add build system with jump-to error 
-- [] Record macros like emacs
-- [] Beautify C/C++
+- [ ] Multiple Active Cursors in a buffer
+- [ ] More encodings than utf-8,hex & utf-16. For example Greek (Windows 1253), Celtic (ISO-8859-14)
+- [ ] More Syntax highlighting for different languages
+- [ ] Add build system with jump-to error 
+- [ ] Record macros like emacs
+- [ ] Beautify C/C++
 
 
 
