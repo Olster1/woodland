@@ -490,7 +490,7 @@ static void *Platform_OpenFile_withDialog_wideChar(Memory_Arena *arena) {
     path[0] = 0;
     
     config.lpstrFile = path;
-    config.lpstrDefExt = L"cpp" + 1;
+    // config.lpstrDefExt = L"";
     config.nMaxFile = MAX_PATH;
     config.Flags = OFN_FILEMUSTEXIST;
     config.Flags |= OFN_NOCHANGEDIR;//To prevent GetOpenFileName() from changing the working directory
@@ -513,7 +513,7 @@ static void *Platform_SaveFile_withDialog_wideChar(Memory_Arena *arena) {
     path[0] = 0;
     
     config.lpstrFile = path;
-    config.lpstrDefExt = L"cpp" + 1;
+    // config.lpstrDefExt = L"cpp";
     config.nMaxFile = MAX_PATH;
     config.Flags = OFN_OVERWRITEPROMPT;
     config.Flags |= OFN_NOCHANGEDIR;//To prevent GetOpenFileName() from changing the working directory

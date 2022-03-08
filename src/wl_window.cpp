@@ -3,7 +3,6 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 
 	WL_Buffer *b = &open_buffer->buffer;
 
-	
 
 	Rect2f window_bounds = make_rect2f(w->bounds_.minX*windowWidth, w->bounds_.minY*windowWidth, w->bounds_.maxX*windowWidth, w->bounds_.maxY*windowHeight);
 
@@ -74,7 +73,7 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 
 	// u8 *str = compileBuffer_toNullTerminateString(b);
 
-	Compiled_Buffer_For_Drawing buffer_to_draw = compileBuffer_toDraw(b, &globalPerFrameArena);
+	Compiled_Buffer_For_Drawing buffer_to_draw = compileBuffer_toDraw(b, &globalPerFrameArena, &editorState->selectable_state);
 
 	// OutputDebugStringA((LPCSTR)str);
 	// OutputDebugStringA((LPCSTR)"\n");
@@ -105,6 +104,15 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 	//NOTE: Output the buffer
 
 	bool got_cursor = false;
+
+	bool in_select = false;
+
+	Highlight_Array *highlight_array = 0;
+	if(is_active) {
+		highlight_array = init_highlight_array(&globalPerFrameArena);
+
+
+	}
 
 	size_t closest_click_buffer_point = 0;
 	float closest_click_distance = FLT_MAX;
@@ -177,15 +185,15 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 			}
 
 			//NOTE: Draw selectable overlay
-			if(is_active && editorState->selectable_state.is_active) {
-				if(memory_offset == editorState->selectable_state.start_offset_in_bytes) {
-					editorState->selectable_state.start_pos = make_float2(xAt, yAt);
-					hit_start = true;
-				}
+			{
+				if(is_active && editorState->selectable_state.is_active) {
+					if(memory_offset == buffer_to_draw.shift_begin) {
+						in_select = true;
+					}
 
-				if(memory_offset == editorState->selectable_state.end_offset_in_bytes) {
-					editorState->selectable_state.end_pos = make_float2(xAt, yAt);
-					hit_end = true;
+					if(memory_offset == buffer_to_draw.shift_end) {
+						in_select = false;
+					}
 				}
 			}
 
@@ -240,6 +248,8 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 				// sprintf(buffer, "%d\n", g.unicodePoint);
 				// OutputDebugStringA(buffer);
 
+				
+
 				if(g.hasTexture) {
 
 
@@ -257,8 +267,17 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 					pos.y = yAt + -fontScale*g.yoffset + offsetY;
 					pos.z = 1.0f;
 					pushGlyph(renderer, g.handle, pos, scale, text_color, g.uvCoords);
+
+					if(in_select) {
+						float2 selectScale = scale;
+
+						// if(selectScale.y < font.fontHeight) { selectScale.y = font.fontHeight; } 
+						highlight_push_rectangle(highlight_array, make_rect2f_center_dim(pos.xy, selectScale), yAt);
+					}
+
 				}
 
+				
 				xAt += (g.width + g.xoffset)*fontScale*factor;
 
 				if((xAt) > max_x) {
@@ -318,29 +337,26 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 			}
 		} 
 
+
+		//NOTE: This is drawing the selectable overlay 
 		if(editorState->selectable_state.is_active) {
 
-			assert(hit_start);
-			if(!hit_end) {
-				editorState->selectable_state.end_pos.x = xAt;
+			for(int i = 0; i < highlight_array->number_of_rects; ++i) {
+				Hightlight_Rect *r = highlight_get_rectangle(highlight_array, i); 
+					
+				float2 p = get_centre_rect2f(r->rect);
+				float2 s = get_scale_rect2f(r->rect);	
+
+				float draw_y = p.y + 0.25f*font.fontHeight*fontScale;
+
+				pushShader(renderer, &textureShader);
+
+				float4 color = editorState->color_palette.standard;
+
+				color.w = 0.3f;
+				pushTexture(renderer, global_white_texture, make_float3(p.x, draw_y, 1.0f), s, color, make_float4(0, 0, 1, 1));
 			}
-
-			float start_x = editorState->selectable_state.start_pos.x;
-			float end_x = editorState->selectable_state.end_pos.x;
-
-			if(start_x > end_x) {
-				end_x = editorState->selectable_state.start_pos.x;
-				start_x = editorState->selectable_state.end_pos.x;
-			} 
-
-			assert(start_x <= end_x);
-
-			float draw_y = editorState->selectable_state.start_pos.y + 0.25f*font.fontHeight*fontScale;
-
-			pushShader(renderer, &rectOutlineShader);
-
-			float2 scale = make_float2(end_x - start_x, font.fontHeight*fontScale);
-			pushRectOutline(renderer, make_float3(start_x + 0.5f*scale.x, draw_y, 1.0f), scale, editorState->color_palette.standard);
+			
 		}
 
 

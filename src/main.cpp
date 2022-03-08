@@ -2,11 +2,11 @@
 #include "file_helper.cpp"
 #include "lex_utf8.h"
 #include "color.cpp"
+#include "selectable.cpp"
 #include "wl_buffer.cpp"
 #include "wl_ast.cpp"
 #include "font.cpp"
 #include "ui.cpp"
-#include "selectable.cpp"
 #include "save_settings.cpp"
 
 
@@ -274,7 +274,7 @@ static void DEBUG_draw_stats(EditorState *editorState, Renderer *renderer, Font 
 	DEBUG_draw_stats_MACRO("Per Frame Arena Total Size", DEBUG_get_total_arena_size(&globalPerFrameArena), true);
 
 	// WL_Window *w = &editorState->windows[editorState->active_window_index];
-	DEBUG_draw_stats_FLOAT_MACRO("Start at: ", editorState->selectable_state.start_pos.x, editorState->selectable_state.start_pos.y);
+	// DEBUG_draw_stats_FLOAT_MACRO("Start at: ", editorState->selectable_state.start_pos.x, editorState->selectable_state.start_pos.y);
 	// DEBUG_draw_stats_FLOAT_MACRO("Target Scroll: ", w->scroll_target_pos.x, w->scroll_target_pos.y);
 
 	DEBUG_draw_stats_FLOAT_MACRO("mouse scroll x ", global_platformInput.mouseX / windowWidth, global_platformInput.mouseY / windowHeight);
@@ -630,6 +630,7 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 						addTextToBuffer(b, (char *)global_platformInput.textInput_utf8, b->cursorAt_inBytes);
 						open_buffer->should_scroll_to = true;
 						open_buffer->is_up_to_date = false;
+						end_select(&editorState->selectable_state);
 					}
 
 					// OutputDebugStringA((char *)global_platformInput.textInput_utf8);

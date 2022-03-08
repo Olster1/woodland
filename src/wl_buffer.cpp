@@ -150,8 +150,11 @@ struct Compiled_Buffer_For_Drawing {
 };
 
 
-static Compiled_Buffer_For_Drawing compileBuffer_toDraw(WL_Buffer *b, Memory_Arena *tempArena) {
+static Compiled_Buffer_For_Drawing compileBuffer_toDraw(WL_Buffer *b, Memory_Arena *tempArena, Selectable_State *selectState) {
 	Compiled_Buffer_For_Drawing result = {};
+
+	bool wroteEndSelect = false;
+	bool wroteStartSelect = false;
 
 	bool wroteCursor = false;
 	result.memory = (u8 *)pushSize(tempArena, b->bufferSize_inBytes + 1); //NOTE: For null terminator and cursor spot
@@ -161,6 +164,10 @@ static Compiled_Buffer_For_Drawing compileBuffer_toDraw(WL_Buffer *b, Memory_Are
 		
 		if(i == b->cursorAt_inBytes) { result.cursor_at = result.size_in_bytes; wroteCursor = true; }
 
+		if(i == selectState->start_offset_in_bytes) { result.shift_begin = result.size_in_bytes; wroteStartSelect = true; }
+
+		if(i == selectState->end_offset_in_bytes) { result.shift_end = result.size_in_bytes; wroteEndSelect = true; }
+
 		if(i >= b->gapBuffer_startAt && i < b->gapBuffer_endAt) {
 			//NOTE: In Gap Buffer
 		} else {
@@ -168,9 +175,23 @@ static Compiled_Buffer_For_Drawing compileBuffer_toDraw(WL_Buffer *b, Memory_Are
 		}
 	}
 
+	if(!wroteStartSelect) {
+		result.shift_begin = result.size_in_bytes;
+	}
+
+	if(!wroteEndSelect) {
+		result.shift_end = result.size_in_bytes;
+	}
 
 	if(!wroteCursor) {
 		result.cursor_at = result.size_in_bytes;
+	}
+
+	//NOTE: make begin always first
+	if(result.shift_end < result.shift_begin) {
+		size_t temp = result.shift_begin;
+		result.shift_begin = result.shift_end;
+		result.shift_end = temp;
 	}
 
 	result.memory[result.size_in_bytes] = '\0'; //null terminate the buffer

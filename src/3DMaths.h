@@ -14,7 +14,18 @@ struct float2
 
 struct float3
 {
-    float x, y, z;
+	union {
+		struct 
+		{
+			float x, y, z;	
+		};
+		struct 
+		{
+			float2 xy;
+			float z;	
+		};
+    	
+	};
 }; 
 
 struct float4
@@ -75,6 +86,17 @@ static Rect2f make_rect2f(float minX, float minY, float maxX, float maxY) {
 	return result; 
 }
 
+static Rect2f make_rect2f_center_dim(float2 centre, float2 dim) {
+	Rect2f result = {};
+
+	result.minX = centre.x - 0.5f*dim.x;
+	result.minY = centre.y - 0.5f*dim.y;
+	result.maxX = centre.x + 0.5f*dim.x;
+	result.maxY = centre.y + 0.5f*dim.y;
+
+	return result; 
+}
+
 static float2 get_centre_rect2f(Rect2f r) {
 	float2 result = {};
 
@@ -89,6 +111,28 @@ static float2 get_scale_rect2f(Rect2f r) {
 
 	result.x = (r.maxX - r.minX);
 	result.y = (r.maxY - r.minY);
+
+	return result;
+}
+
+static Rect2f rect2f_union(Rect2f a, Rect2f b) {
+	Rect2f result = a;
+
+	if(b.minX < a.minX) {
+		result.minX = b.minX;
+	}
+
+	if(b.minY < a.minY) {
+		result.minY = b.minY;
+	}
+
+	if(b.maxX > a.maxX) {
+		result.maxX = b.maxX;
+	}
+
+	if(b.maxY > a.maxY) {
+		result.maxY = b.maxY;
+	}
 
 	return result;
 }

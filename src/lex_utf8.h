@@ -905,8 +905,8 @@ EasyToken lexGetToken_(EasyTokenizer *tokenizer, bool advanceWithToken) {
                     if(*at == '.') {
                         numberOfDecimal++;
                         if(numberOfDecimal > 1) {
-                            printf("found more than one colon in number at lineNumber: %d", *lineNumber);
-                            assert(false);
+                            // printf("found more than one colon in number at lineNumber: %d", *lineNumber);
+                            // assert(false);
                             break;
                         }
                     }
