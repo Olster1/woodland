@@ -29,8 +29,10 @@ It's really just for me as a fun project, something to practice using Direct3d a
 - [x] Saves windows size from last session in AppData folder
 
 ## Near Future (roughly in order of priority)
+- [x] Up and down arrows to move line by line
+- [x] End of line key & home key to jump to end of line and start respectively
 - [ ] Shift highlighting of multiple lines to cut, copy & delete text - both with Shift-Arrows and Mouse Click-Drag
-- [ ] Up and down arrows to move line by line
+- [ ] Open buffer that has been loaded (ctrl - b -> open a dropdown of all open buffers)
 - [ ] Robust Undo/Redo 
 
 
@@ -42,7 +44,6 @@ It's really just for me as a fun project, something to practice using Direct3d a
 - [ ] Vertical Guidlines to match up scope levels 
 
 - [ ] Chunk the buffer to optimize editing and rendering the buffer
-- [ ] Open buffer that has been loaded (ctrl - b -> open a dropdown of all open buffers)
 - [ ] Full Unicode support (trying to account for it as I go, but not fully and sure to be mistakes and edge cases not accounting for)
 - [ ] Utf-16 rendering (have to find a way of detecting if it is a utf-16 file - maybe just look for the BOM header, also have to write a utf-16 decoded which doesn't seem to hard)
 - [ ] Have concept of project that is remembered (just a folder, store previous projects in AppData)

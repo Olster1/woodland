@@ -345,6 +345,14 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
             keyType = PLATFORM_KEY_FULL_STOP;
         } else if(vk_code == VK_OEM_COMMA) {
             keyType = PLATFORM_KEY_COMMA;
+        } else if(vk_code == VK_END) {
+            keyType = PLATFORM_KEY_END;
+            //NOTE: Also add the message to our command buffer if it was a KEYDOWN message
+            addToCommandBuffer = keyIsDown;
+        } else if(vk_code == VK_HOME) {
+            keyType = PLATFORM_KEY_HOME;
+            //NOTE: Also add the message to our command buffer if it was a KEYDOWN message
+            addToCommandBuffer = keyIsDown;
         } else if(vk_code == 'C') {
             keyType = PLATFORM_KEY_C;
         } else if(vk_code == 'S') {

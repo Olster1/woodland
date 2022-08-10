@@ -239,6 +239,68 @@ static WL_Open_Buffer *open_file_and_add_to_window(EditorState *editorState, cha
 	return result;
 }
 
+
+
+static void updateNewCursorPos(EditorState *editorState, WL_Buffer *b, int new_cursor_pos_inBytes) {
+	if(new_cursor_pos_inBytes >= 0){ //is valid move
+		if(global_platformInput.keyStates[PLATFORM_KEY_SHIFT].isDown) 
+		{
+			update_select(&editorState->selectable_state, b->cursorAt_inBytes);
+		} else {
+			end_select(&editorState->selectable_state);
+		}
+
+	    b->cursorAt_inBytes = new_cursor_pos_inBytes;
+
+	    if(global_platformInput.keyStates[PLATFORM_KEY_SHIFT].isDown) 
+	    {
+	    	assert(editorState->selectable_state.is_active);
+	    	update_select(&editorState->selectable_state, b->cursorAt_inBytes);
+	    } else {
+			end_select(&editorState->selectable_state);
+		}
+	}
+}
+
+static int getCursorPosAtStartOfLine(EditorState *editorState, WL_Buffer *b) {
+	u8 *start = (u8 *)(b->bufferMemory + (b->cursorAt_inBytes)); 
+	u8 *at = start;
+
+	if(*at == '\n' && (at - 1) >= b->bufferMemory) { at--; } //NOTE: Move past new line
+	if(*at == '\r' && (at - 1) >= b->bufferMemory) { at--; } //NOTE: Move past new line
+
+	//NOTE: Walk backwards till you find a new line
+	while(at >= b->bufferMemory) {
+		if(*at == '\n' || *at == '\r' || at == b->bufferMemory) {
+			//NOTE: Found new line
+			if(*at == '\n' || *at == '\r') {at++;}
+			break;
+		}
+		at--;
+	}
+
+	int result = (int)(at - b->bufferMemory);
+	return result;
+
+}
+
+static int getCursorPosAtEndOfLine(EditorState *editorState, WL_Buffer *b) {
+	u8 *start = (u8 *)(b->bufferMemory + (b->cursorAt_inBytes)); 
+	u8 *at = start;
+
+	//NOTE: Walk backwards till you find a new line
+	while(at < (b->bufferMemory + b->bufferSize_inUse_inBytes)) {
+		if(*at == '\n' || *at == '\r') {
+			//NOTE: Found new line
+			break;
+		}
+		at++;
+	}
+
+	int result = (int)(at - b->bufferMemory);
+	return result;
+}
+
 static float getXposAtInLine(EditorState *editorState, WL_Buffer *b, Font *font, float fontScale) {
 	u8 *start = (u8 *)(b->bufferMemory + (b->cursorAt_inBytes)); 
 	u8 *at = start;
@@ -938,6 +1000,26 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 					        }
 					    }   
 
+					   	if(command == PLATFORM_KEY_END) {
+
+					   		endGapBuffer(b);
+
+					   		
+					   		int new_cursor_pos_inBytes = getCursorPosAtEndOfLine(editorState, b);
+
+					   		
+					   	    updateNewCursorPos(editorState, b, new_cursor_pos_inBytes);
+					   	}  
+
+					   	if(command == PLATFORM_KEY_HOME) {
+
+					   		endGapBuffer(b);
+					   		int new_cursor_pos_inBytes = getCursorPosAtStartOfLine(editorState, b);
+					   		updateNewCursorPos(editorState, b, new_cursor_pos_inBytes);
+					   		
+					   	    
+					   	}  
+
 					    if(command == PLATFORM_KEY_UP) {
 
 					    	endGapBuffer(b);
@@ -948,27 +1030,8 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 
 					    	assert(editorState->moveVertical_xPos  >= 0);
 					    	int new_cursor_pos_inBytes = getCusorPosLineAbove(editorState, b, &editorState->font, editorState->fontScale);
-
-					    	
-					        //NOTE: Move cursor up 
-					        if(new_cursor_pos_inBytes >= 0){ //is valid move
-					        	if(global_platformInput.keyStates[PLATFORM_KEY_SHIFT].isDown) 
-					        	{
-					        		update_select(&editorState->selectable_state, b->cursorAt_inBytes);
-					        	} else {
-					        		end_select(&editorState->selectable_state);
-					        	}
-
-					            b->cursorAt_inBytes = new_cursor_pos_inBytes;
-
-					            if(global_platformInput.keyStates[PLATFORM_KEY_SHIFT].isDown) 
-					            {
-					            	assert(editorState->selectable_state.is_active);
-					            	update_select(&editorState->selectable_state, b->cursorAt_inBytes);
-					            } else {
-					        		end_select(&editorState->selectable_state);
-					        	}
-					        }
+					        
+					   	    updateNewCursorPos(editorState, b, new_cursor_pos_inBytes);
 					    }  
 
 					    if(command == PLATFORM_KEY_DOWN) {
@@ -982,26 +1045,7 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 					    	assert(editorState->moveVertical_xPos  >= 0);
 					    	int new_cursor_pos_inBytes = getCusorPosLineBelow(editorState, b, &editorState->font, editorState->fontScale);
 
-					    	
-					        //NOTE: Move cursor down 
-					        if(new_cursor_pos_inBytes >= 0){ //is valid move
-					        	if(global_platformInput.keyStates[PLATFORM_KEY_SHIFT].isDown) 
-					        	{
-					        		update_select(&editorState->selectable_state, b->cursorAt_inBytes);
-					        	} else {
-					        		end_select(&editorState->selectable_state);
-					        	}
-
-					            b->cursorAt_inBytes = new_cursor_pos_inBytes;
-
-					            if(global_platformInput.keyStates[PLATFORM_KEY_SHIFT].isDown) 
-					            {
-					            	assert(editorState->selectable_state.is_active);
-					            	update_select(&editorState->selectable_state, b->cursorAt_inBytes);
-					            } else {
-					        		end_select(&editorState->selectable_state);
-					        	}
-					        }
+							updateNewCursorPos(editorState, b, new_cursor_pos_inBytes);				   	
 					    }      
 					}
 				}
