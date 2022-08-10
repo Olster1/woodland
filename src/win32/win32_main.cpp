@@ -323,8 +323,10 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
         //NOTE: match our internal key names to the vk code
         if(vk_code == VK_UP) { 
             keyType = PLATFORM_KEY_UP;
+            addToCommandBuffer = keyIsDown;
         } else if(vk_code == VK_DOWN) {
             keyType = PLATFORM_KEY_DOWN;
+            addToCommandBuffer = keyIsDown;
         } else if(vk_code == VK_LEFT) {
             keyType = PLATFORM_KEY_LEFT;
 

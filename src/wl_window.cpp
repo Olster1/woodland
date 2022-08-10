@@ -302,6 +302,10 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 		if(tried_clicking) {
 			if(closest_click_distance != FLT_MAX) {
 				b->cursorAt_inBytes = convert_compiled_byte_point_to_buffer_byte_point(b, closest_click_buffer_point);
+
+				end_select(&editorState->selectable_state);
+
+				update_select(&editorState->selectable_state, b->cursorAt_inBytes);
 			}
 		}
 		

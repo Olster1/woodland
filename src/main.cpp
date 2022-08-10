@@ -93,7 +93,7 @@ typedef struct {
 
 	char *save_file_location_utf8;
 
-	size_t move_vertical_rune_at;
+	float moveVertical_xPos;
 
 } EditorState;
 
@@ -230,7 +230,7 @@ static WL_Open_Buffer *open_file_and_add_to_window(EditorState *editorState, cha
 
 		result = open_buffer;
 
-		open_buffer->ast = easyAst_generateAst((char *)b->bufferMemory, &global_long_term_arena);
+		// open_buffer->ast = easyAst_generateAst((char *)b->bufferMemory, &global_long_term_arena);
 
 	} else {
 		// assert(!"Couldn't open file");
@@ -239,6 +239,199 @@ static WL_Open_Buffer *open_file_and_add_to_window(EditorState *editorState, cha
 	return result;
 }
 
+static float getXposAtInLine(EditorState *editorState, WL_Buffer *b, Font *font, float fontScale) {
+	u8 *start = (u8 *)(b->bufferMemory + (b->cursorAt_inBytes)); 
+	u8 *at = start;
+
+	//NOTE: Walk backwards till you find a new line
+	while(at >= b->bufferMemory) {
+		if(*at == '\n' || *at == '\r' || at == b->bufferMemory) {
+			//NOTE: Found new line
+			break;
+		}
+		at--;
+	}
+
+	if(*at == '\n' || *at == '\r') {
+		at++;
+	}
+
+	float xAt = 0;
+	//Now walk forwards to get x posistion
+	while(*at != '\n' && *at != '\r' && at < (b->bufferMemory + b->bufferSize_inUse_inBytes) && at < (b->bufferMemory + b->cursorAt_inBytes)) {
+		u32 rune = easyUnicode_utf8_codepoint_To_Utf32_codepoint(&((char *)at), true);
+		float factor = 1.0f;
+
+		if(rune == '\t') {
+			rune = (u32)' ';
+			factor = 4.0f;
+		} 
+
+		GlyphInfo g = easyFont_getGlyph(font, rune);	
+		assert(g.unicodePoint == rune);
+
+		xAt += (g.width + g.xoffset)*fontScale*factor;
+	}
+
+
+	return xAt;
+}
+
+static int getCusorPosLineBelow(EditorState *editorState, WL_Buffer *b, Font *font, float fontScale) {
+	int new_cursor_pos_inBytes = -1; //-1 not valid move
+
+	u8 *at =  b->bufferMemory + b->cursorAt_inBytes;
+
+	bool found = false;
+	while(at < (b->bufferMemory + b->bufferSize_inUse_inBytes) && !found) {
+		//NOTE: look for two lines above
+
+		if(at == (b->bufferMemory + b->bufferSize_inUse_inBytes - 1)) {
+			//NOTE: We are one the first line of the buffer so don't bother trying to move down, so new_cursor_pos_inBytes is invalid 
+			found = true;
+			break;
+		}
+
+		if((*at == '\n' || *at == '\r') && !found) {
+
+			//NOTE: Found new line
+			found = true;
+
+			if(*at == '\r') { at++; } //NOTE: Move past new line
+			if(*at == '\n') { at++; } //NOTE: Move past new line
+
+			bool looking_for = true;
+
+			if(*at == '\r' || *at == '\n') {
+				//NOTE: we are at a new line which got missed in the loop below, so we just set the new cursor position here
+				new_cursor_pos_inBytes = at - b->bufferMemory;
+				looking_for = false;
+
+			}
+
+
+			
+			float xAt = 0; 
+			float bestPos = FLT_MAX;
+
+			//NOTE: Walk until end of line or best_position is found
+			while(*at != '\n' && *at != '\r' && at < (b->bufferMemory + b->bufferSize_inUse_inBytes) && looking_for) {
+				u32 rune = easyUnicode_utf8_codepoint_To_Utf32_codepoint(&((char *)at), true);
+				float factor = 1.0f;
+
+				if(rune == '\t') {
+					rune = (u32)' ';
+					factor = 4.0f;
+				} 
+
+				GlyphInfo g = easyFont_getGlyph(font, rune);	
+				assert(g.unicodePoint == rune);
+
+				xAt += (g.width + g.xoffset)*fontScale*factor;
+
+				float val = get_abs_value(xAt - editorState->moveVertical_xPos);
+				if(val < bestPos) {
+					bestPos = val;
+					new_cursor_pos_inBytes = at - b->bufferMemory;
+				} else {
+					looking_for = false;						
+				}
+
+				//NOTE: at incremented by the getglyph function
+			}
+		}
+
+		at++;
+	}
+	return new_cursor_pos_inBytes;
+}
+
+static int getCusorPosLineAbove(EditorState *editorState, WL_Buffer *b, Font *font, float fontScale) {
+	int new_cursor_pos_inBytes = -1; //-1 not valid move
+
+	u8 *at =  b->bufferMemory + b->cursorAt_inBytes;
+
+	//NOTE: Because we're moving backwards we could be at the end of line and the cursor would be at a newline, so this would cound as a new line, so we move back from these
+	if(*at == '\n' && (at - 1) >= b->bufferMemory) { at--; } //NOTE: Move past new line
+	if(*at == '\r' && (at - 1) >= b->bufferMemory) { at--; } //NOTE: Move past new line
+
+	int newlineCount = 0;
+	bool found = false;
+	while(at >= b->bufferMemory && !found) {
+		//NOTE: look for two lines above
+
+		if(at == b->bufferMemory && newlineCount == 0) {
+			//NOTE: We are one the first line of the buffer so don't bother trying to move up
+			found = true;
+			break;
+		}
+
+		if(*at == '\n' || *at == '\r' || (newlineCount == 1 && at == b->bufferMemory)) {
+
+			
+			if(newlineCount == 0) {
+				if((at - 1) >= b->bufferMemory && *at == '\n' && *(at - 1) == '\r') {
+					at--; //Move past the newline 'token'because two characters cound as one new line :(
+				}
+			}
+			//NOTE: Found new line
+			newlineCount++;
+
+			if(newlineCount > 1) {
+
+				//NOTE: Found new line
+				found = true;
+
+				if(*at == '\r') { at++; } //NOTE: Move past new line
+				if(*at == '\n') { at++; } //NOTE: Move past new line
+
+				bool looking_for = true;
+
+				if(*at == '\r' || *at == '\n') {
+					//NOTE: we are at a new line which got missed in the loop below, so we just set the new cursor position here
+					new_cursor_pos_inBytes = at - b->bufferMemory;
+					looking_for = false;
+
+				}
+
+				float xAt = 0; 
+				float bestPos = FLT_MAX;
+
+				//NOTE: Walk until end of line or best_position is found
+				while(looking_for && *at != '\n' && *at != '\r' && at < (b->bufferMemory + b->bufferSize_inUse_inBytes)) {
+					u32 rune = easyUnicode_utf8_codepoint_To_Utf32_codepoint(&((char *)at), true);
+					float factor = 1.0f;
+
+					if(rune == '\t') {
+						rune = (u32)' ';
+						factor = 4.0f;
+					} 
+
+					GlyphInfo g = easyFont_getGlyph(font, rune);	
+					assert(g.unicodePoint == rune);
+
+					xAt += (g.width + g.xoffset)*fontScale*factor;
+
+					float val = get_abs_value(xAt - editorState->moveVertical_xPos);
+					if(val < bestPos) {
+						bestPos = val;
+						new_cursor_pos_inBytes = at - b->bufferMemory;
+					} else {
+						looking_for = false;						
+					}
+
+					//NOTE: at incremented by the getglyph function
+				}
+			}
+		}
+
+		at--;
+	}
+
+	return new_cursor_pos_inBytes;
+}
+
+#include "unitTests.cpp"
 
 static void DEBUG_draw_stats(EditorState *editorState, Renderer *renderer, Font *font, float windowWidth, float windowHeight, float dt) {
 
@@ -312,7 +505,7 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 		editorState->settings_to_save = save_settings_only_use_on_inititalize;
 
 
-		editorState->move_vertical_rune_at = -1; //NOTE: For unintialised
+		editorState->moveVertical_xPos = -1; //NOTE: For unintialised
  		
 		editorState->ui_state.id.id = -1;
 
@@ -330,6 +523,7 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 #if DEBUG_BUILD
 		DEBUG_runUnitTestForLookBackTokens();
 		DEBUG_runUnitTestForLookForwardTokens();
+		DEBUG_runUnitTests();
 #endif
 		
 
@@ -643,6 +837,7 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 
 
 					    if(command == PLATFORM_KEY_BACKSPACE && b->cursorAt_inBytes > 0) {
+					       editorState->moveVertical_xPos = -1;
 					       u32 bytesOfPrevRune = 1;
 					       removeTextFromBuffer(b, b->cursorAt_inBytes - 1, bytesOfPrevRune);
 					       b->cursorAt_inBytes -= bytesOfPrevRune;
@@ -656,6 +851,8 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 					    if(command == PLATFORM_KEY_LEFT) {
 					    	
 					    	endGapBuffer(b);
+
+					    	editorState->moveVertical_xPos = -1;
 
 					    	u32 bytesOfPrevRune = 1;
 
@@ -700,6 +897,9 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 
 					    	u32 bytesOfNextRune = 1;
 
+					    	endGapBuffer(b);
+					    	editorState->moveVertical_xPos = -1;
+
 					    	if(global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown) {
 
 					    		EasyToken token = peekTokenForward_tokenNotComplete((char *)(b->bufferMemory + (b->cursorAt_inBytes)), (char *)(b->bufferMemory + (b->bufferSize_inUse_inBytes)));
@@ -709,7 +909,7 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 					    		}
 					    	}
 					    	
-					    	endGapBuffer(b);
+					    	
 					        //NOTE: Move cursor right 
 					        if(b->cursorAt_inBytes < b->bufferSize_inUse_inBytes) {
 
@@ -736,7 +936,73 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 					        		end_select(&editorState->selectable_state);
 					        	}
 					        }
-					    }       
+					    }   
+
+					    if(command == PLATFORM_KEY_UP) {
+
+					    	endGapBuffer(b);
+
+					    	if(editorState->moveVertical_xPos < 0) {
+					    		editorState->moveVertical_xPos = getXposAtInLine(editorState, b, &editorState->font, editorState->fontScale);
+					    	}
+
+					    	assert(editorState->moveVertical_xPos  >= 0);
+					    	int new_cursor_pos_inBytes = getCusorPosLineAbove(editorState, b, &editorState->font, editorState->fontScale);
+
+					    	
+					        //NOTE: Move cursor up 
+					        if(new_cursor_pos_inBytes >= 0){ //is valid move
+					        	if(global_platformInput.keyStates[PLATFORM_KEY_SHIFT].isDown) 
+					        	{
+					        		update_select(&editorState->selectable_state, b->cursorAt_inBytes);
+					        	} else {
+					        		end_select(&editorState->selectable_state);
+					        	}
+
+					            b->cursorAt_inBytes = new_cursor_pos_inBytes;
+
+					            if(global_platformInput.keyStates[PLATFORM_KEY_SHIFT].isDown) 
+					            {
+					            	assert(editorState->selectable_state.is_active);
+					            	update_select(&editorState->selectable_state, b->cursorAt_inBytes);
+					            } else {
+					        		end_select(&editorState->selectable_state);
+					        	}
+					        }
+					    }  
+
+					    if(command == PLATFORM_KEY_DOWN) {
+
+					    	endGapBuffer(b);
+
+					    	if(editorState->moveVertical_xPos < 0) {
+					    		editorState->moveVertical_xPos = getXposAtInLine(editorState, b, &editorState->font, editorState->fontScale);
+					    	}
+
+					    	assert(editorState->moveVertical_xPos  >= 0);
+					    	int new_cursor_pos_inBytes = getCusorPosLineBelow(editorState, b, &editorState->font, editorState->fontScale);
+
+					    	
+					        //NOTE: Move cursor down 
+					        if(new_cursor_pos_inBytes >= 0){ //is valid move
+					        	if(global_platformInput.keyStates[PLATFORM_KEY_SHIFT].isDown) 
+					        	{
+					        		update_select(&editorState->selectable_state, b->cursorAt_inBytes);
+					        	} else {
+					        		end_select(&editorState->selectable_state);
+					        	}
+
+					            b->cursorAt_inBytes = new_cursor_pos_inBytes;
+
+					            if(global_platformInput.keyStates[PLATFORM_KEY_SHIFT].isDown) 
+					            {
+					            	assert(editorState->selectable_state.is_active);
+					            	update_select(&editorState->selectable_state, b->cursorAt_inBytes);
+					            } else {
+					        		end_select(&editorState->selectable_state);
+					        	}
+					        }
+					    }      
 					}
 				}
 
