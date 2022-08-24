@@ -345,6 +345,10 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
             keyType = PLATFORM_KEY_FULL_STOP;
         } else if(vk_code == VK_OEM_COMMA) {
             keyType = PLATFORM_KEY_COMMA;
+        } else if(vk_code == VK_RETURN) {
+            keyType = PLATFORM_KEY_ENTER;
+         } else if(vk_code == VK_ESCAPE) {
+            keyType = PLATFORM_KEY_ESCAPE;
         } else if(vk_code == VK_END) {
             keyType = PLATFORM_KEY_END;
             //NOTE: Also add the message to our command buffer if it was a KEYDOWN message
@@ -357,6 +361,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
             keyType = PLATFORM_KEY_C;
         } else if(vk_code == 'S') {
             keyType = PLATFORM_KEY_S;
+        } else if(vk_code == 'B') {
+            keyType = PLATFORM_KEY_B;
         } else if(vk_code == VK_SHIFT) {
             keyType = PLATFORM_KEY_SHIFT;
         } else if(vk_code == VK_F5) {

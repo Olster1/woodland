@@ -1,7 +1,9 @@
 enum Ui_Type {
 	WL_INTERACTION_NILL,
 	WL_INTERACTION_RESIZE_WINDOW,
-	WL_INTERACTION_SELECT_WINDOW
+	WL_INTERACTION_SELECT_WINDOW,
+	WL_INTERACTION_SELECT_DROP_DOWN,
+
 };
 
 struct Ui_Id {
@@ -11,12 +13,20 @@ struct Ui_Id {
 
 struct Ui_State {
 	Ui_Id id;
+
+	//NOTE: This is for when you can select a menu with the arrows and mouse. 
+	//		If mouse moves we use the mouse update if we use keys we ignore mouse selection 
+	//		till it moves again.
+	float2 last_mouse_pos;
+	bool use_mouse;
 };
 
 static void try_begin_interaction(Ui_State *state, Ui_Type type, int window_id) {
 	if(state->id.id < 0) { //NO interactions current
 		state->id.id = window_id;
 		state->id.type = type;
+		//NOTE: Default to use mouse action istead of keyboard
+		state->use_mouse = true;
 	}
 }
 
@@ -26,6 +36,12 @@ static bool has_active_interaction(Ui_State *state) {
 
 static bool is_interaction_active(Ui_State *state, Ui_Type type) {
 	bool result = (state->id.id >= 0) && state->id.type == type;
+
+	return result;
+}
+
+static bool is_same_interaction(Ui_State *state, Ui_Type type, int id) {
+	bool result = state->id.id == id && state->id.type == type;
 
 	return result;
 }

@@ -38,6 +38,10 @@ Next:
 
 typedef enum {
 	MODE_EDIT_BUFFER,
+	MODE_BUFFER_SELECT,
+	MODE_FIND,
+	MODE_CALCULATE,
+	MODE_JAVASCRIPT_REPL
 } EditorMode;
 
 typedef struct {
@@ -52,7 +56,7 @@ typedef struct {
 	float2 max_scroll_bounds;
 
 	EasyAst ast;
-
+ 
 	WL_Buffer buffer;
 } WL_Open_Buffer;
 
@@ -95,7 +99,116 @@ typedef struct {
 
 	float moveVertical_xPos;
 
+	int selectionIndex_forDropDown;
+
 } EditorState;
+
+void drawAndUpdateBufferSelection(EditorState *editorState, Renderer *renderer, Font *font, float windowWidth, float windowHeight) {
+	float16 orthoMatrix = make_ortho_matrix_top_left_corner(windowWidth, windowHeight, MATH_3D_NEAR_CLIP_PlANE, MATH_3D_FAR_CLIP_PlANE);
+	pushMatrix(renderer, orthoMatrix);
+
+	//NOTE: Draw the backing
+	pushShader(renderer, &textureShader);
+	float2 scale = make_float2(200, 400);
+	// pushTexture(renderer, global_white_texture, make_float3(100, -200, 1.0f), scale, make_float4(0.3f, 0.3f, 0.3f, 1), make_float4(0, 0, 1, 1));
+	///////////////////////////
+
+	//NOTE: Draw the name of the file
+	pushShader(renderer, &sdfFontShader);
+		
+	float fontScale = 0.6f;
+	float4 color = editorState->color_palette.standard;
+
+	bool *useLongName = pushArray(&globalPerFrameArena, editorState->buffer_count_used, bool);
+
+	for(int i = 0; i < editorState->buffer_count_used; ++i) {
+		for(int j = i + 1; j < editorState->buffer_count_used; ++j) {
+			WL_Open_Buffer *b1 = &editorState->buffers_loaded[i];
+			WL_Open_Buffer *b2 = &editorState->buffers_loaded[j];
+
+			if(easyString_stringsMatch_nullTerminated(b1->name, b2->name)) {
+				//NOTE: Files names the same so show long ones instead 
+				useLongName[i] = true;
+				useLongName[j] = true;
+			}
+		}
+	}
+
+	Rect2f *rectsToDraw = pushArray(&globalPerFrameArena, editorState->buffer_count_used, Rect2f);
+	float4 *colors = pushArray(&globalPerFrameArena, editorState->buffer_count_used, float4);
+
+	float xAt = 0;
+	float yAt = -2.0f*font->fontHeight*fontScale;
+
+	float spacing = -yAt;
+
+	for(int i = 0; i < editorState->buffer_count_used; i++) {
+		WL_Open_Buffer *b = &editorState->buffers_loaded[i];
+
+		char *nameToDraw = b->name;
+
+		if(useLongName[i] && b->file_name_utf8) {
+			nameToDraw = b->file_name_utf8;
+			//NOTE: If nameToDraw is null, this is an unsaved file so we don't have a file name for it
+		}
+
+		//NOTE: Push the outline of the box, we don't draw it since we want to batch the draw calls together
+		rectsToDraw[i] = make_rect2f(0, yAt, windowWidth, yAt + spacing);
+
+
+		if(editorState->ui_state.use_mouse && in_rect2f_bounds(rectsToDraw[i], make_float2(global_platformInput.mouseX, -global_platformInput.mouseY)))
+		{
+
+			//NOTE: If hovering over the box, set it to the index
+			editorState->selectionIndex_forDropDown = i;
+
+			Ui_Type uiType = WL_INTERACTION_SELECT_DROP_DOWN;
+			if(global_platformInput.keyStates[PLATFORM_MOUSE_LEFT_BUTTON].pressedCount > 0) {
+				//NOTE: Try begin an interaction with selecting a menu drop down
+				try_begin_interaction(&editorState->ui_state, uiType, i);
+			}
+			
+			//NOTE: see if the user released on this id 
+			if(global_platformInput.keyStates[PLATFORM_MOUSE_LEFT_BUTTON].releasedCount > 0 && is_same_interaction(&editorState->ui_state, uiType, i)) {
+				//NOTE: Open the buffer now to the one selected
+				WL_Window *w = &editorState->windows[editorState->active_window_index];
+
+				//NOTE: Switch buffer to the new buffer the user selected
+				w->buffer_index = editorState->selectionIndex_forDropDown;
+
+				//NOTE: Exit the dropdown when we press enter
+				editorState->mode = MODE_EDIT_BUFFER;
+			}
+		}
+		
+		if(i == editorState->selectionIndex_forDropDown) {
+			//NOTE: This is the selection we're currently on so draw a different outline color
+			colors[i] = editorState->color_palette.function;
+		} else {
+			colors[i] = editorState->color_palette.standard;
+		} 
+
+		
+		
+		//NOTE: Draw the text
+		draw_text(renderer, font, nameToDraw, xAt, yAt + 0.5f*spacing, fontScale, color); 
+
+		
+		yAt -= spacing;
+
+	}
+
+	pushShader(renderer, &rectOutlineShader);
+
+	for(int i = 0; i < editorState->buffer_count_used; ++i) {
+		Rect2f r = rectsToDraw[i];
+		float4 color = colors[i];
+		
+		float2 c = get_centre_rect2f(r);
+		float2 s = get_scale_rect2f(r);
+		pushRectOutline(renderer, make_float3(c.x, c.y, 1.0f), s, color);
+	}
+}
 
 
 #include "wl_window.cpp"
@@ -856,6 +969,15 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 						open_buffer->scroll_dp.y = 0;
 					}
 
+					//NOTE: Ctrl B -> open buffer chooser
+					if(global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown && global_platformInput.keyStates[PLATFORM_KEY_B].pressedCount > 0) 
+					{
+
+						editorState->mode = MODE_BUFFER_SELECT;
+						editorState->ui_state.use_mouse = true;
+
+					}
+
 					//NOTE: Ctrl P -> paste text from clipboard
 					if(global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown && global_platformInput.keyStates[PLATFORM_KEY_V].pressedCount > 0) 
 					{
@@ -1055,7 +1177,57 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 				draw_wl_window(editorState, w, renderer, is_active, windowWidth, windowHeight, editorState->font, editorState->color_palette.standard, editorState->fontScale, i, mouse_point_top_left_origin);
 			}
 		} break;
+		case MODE_BUFFER_SELECT: {
+			if(global_platformInput.keyStates[PLATFORM_KEY_UP].pressedCount > 0) {
+				editorState->selectionIndex_forDropDown--;
+				editorState->selectionIndex_forDropDown = max(editorState->selectionIndex_forDropDown, 0);
+
+				editorState->ui_state.use_mouse = false;
+			}
+
+			if(global_platformInput.keyStates[PLATFORM_KEY_DOWN].pressedCount > 0) {
+				editorState->selectionIndex_forDropDown++;
+				editorState->selectionIndex_forDropDown = min(editorState->selectionIndex_forDropDown, (editorState->buffer_count_used - 1));
+				
+				editorState->ui_state.use_mouse = false;
+			}
+
+			float2 mouseP = make_float2(global_platformInput.mouseX, global_platformInput.mouseY);
+
+			if(!editorState->ui_state.use_mouse && !are_float2_equal(editorState->ui_state.last_mouse_pos, mouseP)) {
+				editorState->ui_state.use_mouse = true;
+
+			}
+
+			//NOTE: Get the latest mouse position
+			editorState->ui_state.last_mouse_pos = mouseP;
+
+			if(global_platformInput.keyStates[PLATFORM_KEY_ENTER].pressedCount > 0) {
+				//NOTE: Open the buffer now to the one selected
+				WL_Window *w = &editorState->windows[editorState->active_window_index];
+
+				//NOTE: Switch buffer to the new buffer the user selected
+				w->buffer_index = editorState->selectionIndex_forDropDown;
+
+				//NOTE: Exit the dropdown when we press enter
+				editorState->mode = MODE_EDIT_BUFFER;
+			}
+
+			if(global_platformInput.keyStates[PLATFORM_KEY_ESCAPE].pressedCount > 0) {
+				//NOTE: Escape exits the buffer we're on
+				editorState->mode = MODE_EDIT_BUFFER;
+
+				if(is_interaction_active(&editorState->ui_state, WL_INTERACTION_SELECT_DROP_DOWN)) {
+					//NOTE: Make sure we don't have an interaction anymore if we were trying to interact with a box
+					end_interaction(&editorState->ui_state);
+				}
+			}
+
+			drawAndUpdateBufferSelection(editorState, renderer, &editorState->font, windowWidth, windowHeight);
+		} break;
 	}
+
+
 
 	
 	//////////////////////////////////////////////////////// 

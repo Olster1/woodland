@@ -46,6 +46,11 @@ static float2 lerp_float2(float2 a, float2 b, float t) {
 	return make_float2((b.x - a.x)*t + a.x, (b.y - a.y)*t + a.y);
 }
 
+static bool are_float2_equal(float2 a, float2 b) {
+	return (a.x == b.x && a.y == b.y);
+}
+
+
 static float3 make_float3(float x0, float y0, float z0) {
 	float3 result = {};
 
