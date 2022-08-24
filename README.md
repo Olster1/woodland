@@ -31,8 +31,9 @@ It's really just for me as a fun project, something to practice using Direct3d a
 ## Near Future (roughly in order of priority)
 - [x] Up and down arrows to move line by line
 - [x] End of line key & home key to jump to end of line and start respectively
+- [x] Open buffer that has been loaded (ctrl - b -> open a dropdown of all open buffers)
+- [ ] Add search filter for open buffers
 - [ ] Shift highlighting of multiple lines to cut, copy & delete text - both with Shift-Arrows and Mouse Click-Drag
-- [ ] Open buffer that has been loaded (ctrl - b -> open a dropdown of all open buffers)
 - [ ] Robust Undo/Redo 
 
 
