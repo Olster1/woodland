@@ -271,8 +271,8 @@ static inline GlyphInfo easyFont_getGlyph(Font *font, u32 unicodePoint) {
 }
 
 
-static void draw_text(Renderer *renderer, Font *font, char *str, float startX, float yAt_, float fontScale, float4 font_color) {
-    float yAt = -0.5f*font->fontHeight*fontScale + yAt_;
+static void draw_text(Renderer *renderer, Font *font, char *str, float startX, float yAt, float fontScale, float4 font_color) {
+    // float yAt = -0.5f*font->fontHeight*fontScale + yAt_;
 
     bool newLine = true;
 

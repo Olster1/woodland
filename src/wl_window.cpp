@@ -65,7 +65,7 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 
 		
 		float title_offset = 5;
-		draw_text(renderer, &font, name_str, window_bounds.minX + title_offset, -window_bounds.minY - title_offset, fontScale, editorState->color_palette.standard);
+		draw_text(renderer, &font, name_str, window_bounds.minX + title_offset, -0.5f*font.fontHeight*fontScale -window_bounds.minY - title_offset, fontScale, editorState->color_palette.standard);
 	}
 
 
@@ -73,7 +73,7 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 
 	// u8 *str = compileBuffer_toNullTerminateString(b);
 
-	Compiled_Buffer_For_Drawing buffer_to_draw = compileBuffer_toDraw(b, &globalPerFrameArena, &editorState->selectable_state);
+	Compiled_Buffer_For_Drawing buffer_to_draw = compileBuffer_toDraw(b, &globalPerFrameArena, &open_buffer->selectable_state);
 
 	// OutputDebugStringA((LPCSTR)str);
 	// OutputDebugStringA((LPCSTR)"\n");
@@ -186,7 +186,7 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 
 			//NOTE: Draw selectable overlay
 			{
-				if(is_active && editorState->selectable_state.is_active) {
+				if(is_active && &open_buffer->selectable_state.is_active) {
 					if(memory_offset == buffer_to_draw.shift_begin) {
 						in_select = true;
 					}
@@ -303,9 +303,9 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 			if(closest_click_distance != FLT_MAX) {
 				b->cursorAt_inBytes = convert_compiled_byte_point_to_buffer_byte_point(b, closest_click_buffer_point);
 
-				end_select(&editorState->selectable_state);
+				end_select(&open_buffer->selectable_state);
 
-				update_select(&editorState->selectable_state, b->cursorAt_inBytes);
+				update_select(&open_buffer->selectable_state, b->cursorAt_inBytes);
 			}
 		}
 		
@@ -343,7 +343,7 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 
 
 		//NOTE: This is drawing the selectable overlay 
-		if(editorState->selectable_state.is_active) {
+		if(open_buffer->selectable_state.is_active) {
 
 			for(int i = 0; i < highlight_array->number_of_rects; ++i) {
 				Hightlight_Rect *r = highlight_get_rectangle(highlight_array, i); 
