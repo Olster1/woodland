@@ -270,8 +270,8 @@ static inline GlyphInfo easyFont_getGlyph(Font *font, u32 unicodePoint) {
     return glyph;
 }
 
-
-static void draw_text(Renderer *renderer, Font *font, char *str, float startX, float yAt, float fontScale, float4 font_color) {
+//NOTE: Returns cursor position
+static float2 draw_text(Renderer *renderer, Font *font, char *str, float startX, float yAt, float fontScale, float4 font_color, int cursor_in_bytes = 0) {
     // float yAt = -0.5f*font->fontHeight*fontScale + yAt_;
 
     bool newLine = true;
@@ -280,9 +280,14 @@ static void draw_text(Renderer *renderer, Font *font, char *str, float startX, f
 
     char *at = str;
 
+    //NOTE: cursor position default
+    float2 cursorPosition = make_float2(xAt, yAt);
+
     while(*at) {
 
         u32 rune = easyUnicode_utf8_codepoint_To_Utf32_codepoint(&((char *)at), true);
+
+        
 
         float factor = 1.0f;
 
@@ -316,5 +321,15 @@ static void draw_text(Renderer *renderer, Font *font, char *str, float startX, f
         xAt += (g.width + g.xoffset)*fontScale*factor;
 
         newLine = false;
+        
+        if((at - str) == cursor_in_bytes) {
+            cursorPosition = make_float2(xAt, yAt);
+        }
     }
+
+    if((at - str) == cursor_in_bytes) {
+        cursorPosition = make_float2(xAt, yAt);
+    }
+
+    return cursorPosition;
 }

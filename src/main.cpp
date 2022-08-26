@@ -118,16 +118,19 @@ typedef struct {
 } EditorState;
 
 #include "single_search.cpp"
-#include "bufferInputController.cpp"
 
-static set_editor_mode(EditorState *editorState, EditorMode mode) {
+static void set_editor_mode(EditorState *editorState, EditorMode mode) {
 	refresh_buffer(&editorState->searchBar);
 	editorState->mode_ = mode;
 }
 
-static get_editor_mode(EditorState *editorState, EditorMode mode) {
+static EditorMode get_editor_mode(EditorState *editorState) {
 	return editorState->mode_;
 }
+
+#include "bufferInputController.cpp"
+
+
 
 void drawAndUpdateBufferSelection(EditorState *editorState, Renderer *renderer, Font *font, float windowWidth, float windowHeight) {
 	float16 orthoMatrix = make_ortho_matrix_top_left_corner(windowWidth, windowHeight, MATH_3D_NEAR_CLIP_PlANE, MATH_3D_FAR_CLIP_PlANE);
@@ -171,7 +174,10 @@ void drawAndUpdateBufferSelection(EditorState *editorState, Renderer *renderer, 
 	//NOTE: Update the single search buffer
 	process_buffer_controller(editorState, NULL, &editorState->searchBar.buffer, BUFFER_SIMPLE, &editorState->searchBar.selectable_state);
 	//NOTE: Draw the search text
-	draw_single_search(&editorState->searchBar, renderer, font, fontScale, color, xAt, yAt + 0.5f*spacing);
+	draw_single_search(&editorState->searchBar, renderer, font, fontScale, color, xAt, yAt + 0.5f*spacing, editorState->color_palette.standard);
+	
+	//NOTE: 
+	pushShader(renderer, &sdfFontShader);
 
 	//NOTE: Move down a line to now draw all the buffers
 	yAt -= spacing;
@@ -211,7 +217,7 @@ void drawAndUpdateBufferSelection(EditorState *editorState, Renderer *renderer, 
 				w->buffer_index = editorState->selectionIndex_forDropDown;
 
 				//NOTE: Exit the dropdown when we press enter
-				editorState->mode = MODE_EDIT_BUFFER;
+				set_editor_mode(editorState, MODE_EDIT_BUFFER);
 			}
 		}
 		
@@ -442,7 +448,7 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 		initRenderer(&editorState->renderer);
 
 		editorState->active_window_index = 0;
-		editorState->mode = MODE_EDIT_BUFFER;
+		set_editor_mode(editorState, MODE_EDIT_BUFFER);
 
 		#if DEBUG_BUILD
 		editorState->font = initFont("..\\fonts\\liberation-mono.ttf");
@@ -645,7 +651,7 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 	float2 mouse_point_top_left_origin = make_float2(global_platformInput.mouseX, global_platformInput.mouseY);	
 	float2 mouse_point_top_left_origin_01 = make_float2(global_platformInput.mouseX / windowWidth, global_platformInput.mouseY / windowHeight);
 
-	switch(editorState->mode) {
+	switch(editorState->mode_) {
 		case MODE_EDIT_BUFFER: {	
 
 			if(is_interaction_active(&editorState->ui_state, WL_INTERACTION_RESIZE_WINDOW)) {
@@ -794,12 +800,12 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 				w->buffer_index = editorState->selectionIndex_forDropDown;
 
 				//NOTE: Exit the dropdown when we press enter
-				editorState->mode = MODE_EDIT_BUFFER;
+				set_editor_mode(editorState, MODE_EDIT_BUFFER);
 			}
 
 			if(global_platformInput.keyStates[PLATFORM_KEY_ESCAPE].pressedCount > 0) {
 				//NOTE: Escape exits the buffer we're on
-				editorState->mode = MODE_EDIT_BUFFER;
+				set_editor_mode(editorState, MODE_EDIT_BUFFER);
 
 				if(is_interaction_active(&editorState->ui_state, WL_INTERACTION_SELECT_DROP_DOWN)) {
 					//NOTE: Make sure we don't have an interaction anymore if we were trying to interact with a box

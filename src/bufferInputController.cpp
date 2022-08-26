@@ -285,10 +285,10 @@ static void process_buffer_controller(EditorState *editorState, WL_Open_Buffer *
     //NOTE: Ctrl B -> open buffer chooser
     if(global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown && global_platformInput.keyStates[PLATFORM_KEY_B].pressedCount > 0) 
     {
-        if(editorState->mode == MODE_BUFFER_SELECT){
-            editorState->mode = MODE_EDIT_BUFFER;
+        if(editorState->mode_ == MODE_BUFFER_SELECT){
+            set_editor_mode(editorState, MODE_EDIT_BUFFER);
         } else {
-            editorState->mode = MODE_BUFFER_SELECT;
+            set_editor_mode(editorState, MODE_BUFFER_SELECT);
         }
         
         editorState->ui_state.use_mouse = true;
