@@ -374,7 +374,7 @@ static WL_Open_Buffer *open_file_and_add_to_window(EditorState *editorState, cha
 		} 
 		//TODO: eventually we'll want to check all different encodings
 
-		addTextToBuffer(b, start_of_text, b->cursorAt_inBytes);
+		addTextToBuffer(b, start_of_text, b->cursorAt_inBytes, open_buffer->is_up_to_date);
 
 		open_buffer->file_name_utf8 = (char *)platform_wide_char_to_utf8_allocates_on_heap(file_name_wide_char);
 		open_buffer->name = getFileLastPortion(open_buffer->file_name_utf8);

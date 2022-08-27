@@ -317,11 +317,9 @@ static void process_buffer_controller(EditorState *editorState, WL_Open_Buffer *
         UndoRedoBlock *block = NULL;
         bool isRedo = true;
 
-        int at_in_history = -1;
         //NOTE: Ctrl Z -> copy text to clipboard
         if(global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown && global_platformInput.keyStates[PLATFORM_KEY_Z].pressedCount > 0) 
         {   
-            at_in_history = b->undo_redo_state.at_in_history;
             isRedo = false;
             block = get_undo_block(&b->undo_redo_state);
         }
@@ -329,13 +327,14 @@ static void process_buffer_controller(EditorState *editorState, WL_Open_Buffer *
         //NOTE: Ctrl Y -> copy text to clipboard
         if(global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown && global_platformInput.keyStates[PLATFORM_KEY_Y].pressedCount > 0) 
         {
-            at_in_history = b->undo_redo_state.at_in_history;
             block = get_redo_block(&b->undo_redo_state);
         }
 
         if(block) {
-            if(b->save_at_in_history < 0) {
-                b->save_at_in_history = at_in_history;
+            if(!b->is_undoing_or_redoing) {
+                //NOTE: Take history mark
+
+                b->is_undoing_or_redoing = true;
             }
 
             block->byteAt;

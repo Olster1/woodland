@@ -15,7 +15,7 @@ typedef struct {
 	u32 gapBuffer_startAt;
 
 	UndoRedoState undo_redo_state;
-	int save_at_in_history; //NOTE: See if the buffer is still in saved state if return to end of history
+	bool is_undoing_or_redoing; //NOTE: See if the buffer is still in saved state if return to end of history
 
 } WL_Buffer;
 
@@ -85,7 +85,7 @@ static void addTextToBuffer(WL_Buffer *b, char *str, int indexStart, bool should
 	if(strSize_inBytes > 0) {
 
 		if(should_add_to_history) {
-			b->save_at_in_history = -1;
+			b->is_undoing_or_redoing = false;
 			push_block(&b->undo_redo_state, UNDO_REDO_INSERT, b->cursorAt_inBytes, nullTerminate(str, strSize_inBytes), strSize_inBytes);
 		}
 		
@@ -147,7 +147,7 @@ static void removeTextFromBuffer(WL_Buffer *b, int bytesStart, int toRemoveCount
 	}
 
 	if(should_add_to_history) {
-		b->save_at_in_history = -1;
+		b->is_undoing_or_redoing = false;
 		//NOTE: only add if this is a new command, not a repeat of the text 
 		push_block(&b->undo_redo_state, UNDO_REDO_DELETE, b->gapBuffer_startAt, nullTerminate((char *)(b->bufferMemory + b->gapBuffer_startAt), toRemoveCount_inBytes), toRemoveCount_inBytes);
 	} 

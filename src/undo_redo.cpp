@@ -9,6 +9,7 @@ struct UndoRedoBlock {
     size_t byteAt;
     char *string;
     int stringLength;
+
 };
 
 struct UndoRedoState {
