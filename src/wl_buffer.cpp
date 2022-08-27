@@ -14,6 +14,9 @@ typedef struct {
 	u32 gapBuffer_endAt;
 	u32 gapBuffer_startAt;
 
+	UndoRedoState undo_redo_state;
+	int save_at_in_history; //NOTE: See if the buffer is still in saved state if return to end of history
+
 } WL_Buffer;
 
 #define GAP_BUFFER_SIZE_IN_BYTES 2
@@ -34,6 +37,8 @@ removeTextFromBuffer(buffer, bytesStart, toRemoveCount_inBytes)
 
 static void initBuffer(WL_Buffer *b) {
 	memset(b, 0, sizeof(WL_Buffer));
+
+	init_undo_redo_state(&b->undo_redo_state);
 }
 
 static void wl_emptyBuffer(WL_Buffer *b) {
@@ -73,12 +78,17 @@ static void makeGapBuffer_(WL_Buffer *b, int byteStart, int gapSize) {
 
 }
 
-static void addTextToBuffer(WL_Buffer *b, char *str, int indexStart) {
+static void addTextToBuffer(WL_Buffer *b, char *str, int indexStart, bool should_add_to_history = true) {
 
 	u32 strSize_inBytes = easyString_getSizeInBytes_utf8(str); 
 
 	if(strSize_inBytes > 0) {
 
+		if(should_add_to_history) {
+			b->save_at_in_history = -1;
+			push_block(&b->undo_redo_state, UNDO_REDO_INSERT, b->cursorAt_inBytes, nullTerminate(str, strSize_inBytes), strSize_inBytes);
+		}
+		
 		int gapBufferSize = b->gapBuffer_endAt - b->gapBuffer_startAt;
 
 		if(gapBufferSize < strSize_inBytes) {
@@ -122,20 +132,26 @@ static void endGapBuffer(WL_Buffer *b) {
 }
 
 
-static void removeTextFromBuffer(WL_Buffer *b, int bytesStart, int toRemoveCount_inBytes) {
-	{	
-		//NOTE: See if has an active gap
-		int gapDiff = b->gapBuffer_endAt - b->gapBuffer_startAt;
-		
-		//NOTE: No active gap
-		if(gapDiff == 0) {
-			b->gapBuffer_startAt = bytesStart; 
-			b->gapBuffer_endAt = bytesStart + toRemoveCount_inBytes;
-		} else {
-			assert((b->gapBuffer_startAt - toRemoveCount_inBytes) >= 0);
-			b->gapBuffer_startAt -= toRemoveCount_inBytes;
-		}
+static void removeTextFromBuffer(WL_Buffer *b, int bytesStart, int toRemoveCount_inBytes, bool should_add_to_history = true) {
+
+	//NOTE: See if has an active gap
+	int gapDiff = b->gapBuffer_endAt - b->gapBuffer_startAt;
+	
+	//NOTE: No active gap
+	if(gapDiff == 0) {
+		b->gapBuffer_startAt = bytesStart; 
+		b->gapBuffer_endAt = bytesStart + toRemoveCount_inBytes;
+	} else {
+		assert((b->gapBuffer_startAt - toRemoveCount_inBytes) >= 0);
+		b->gapBuffer_startAt -= toRemoveCount_inBytes;
 	}
+
+	if(should_add_to_history) {
+		b->save_at_in_history = -1;
+		//NOTE: only add if this is a new command, not a repeat of the text 
+		push_block(&b->undo_redo_state, UNDO_REDO_DELETE, b->gapBuffer_startAt, nullTerminate((char *)(b->bufferMemory + b->gapBuffer_startAt), toRemoveCount_inBytes), toRemoveCount_inBytes);
+	} 
+	
 }
 
 #define WRITE_GAP_BUFFER_AS_HASH 0

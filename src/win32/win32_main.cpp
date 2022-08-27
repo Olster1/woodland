@@ -361,6 +361,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
             keyType = PLATFORM_KEY_C;
         } else if(vk_code == 'S') {
             keyType = PLATFORM_KEY_S;
+        } else if(vk_code == 'Y') {
+            keyType = PLATFORM_KEY_Y;
         } else if(vk_code == 'B') {
             keyType = PLATFORM_KEY_B;
         } else if(vk_code == VK_SHIFT) {

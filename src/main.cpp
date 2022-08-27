@@ -3,6 +3,7 @@
 #include "lex_utf8.h"
 #include "color.cpp"
 #include "selectable.cpp"
+#include "undo_redo.cpp"
 #include "wl_buffer.cpp"
 #include "wl_ast.cpp"
 #include "font.cpp"
@@ -468,6 +469,8 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 
 		//NOTE: Init the single search bar
 		init_single_search(&editorState->searchBar);
+
+		
 
 		
  		

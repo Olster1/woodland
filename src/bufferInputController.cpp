@@ -312,6 +312,79 @@ static void process_buffer_controller(EditorState *editorState, WL_Open_Buffer *
 
     }
 
+    //NOTE: UNDO REDO commands 
+    if(option == BUFFER_ALL) {
+        UndoRedoBlock *block = NULL;
+        bool isRedo = true;
+
+        int at_in_history = -1;
+        //NOTE: Ctrl Z -> copy text to clipboard
+        if(global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown && global_platformInput.keyStates[PLATFORM_KEY_Z].pressedCount > 0) 
+        {   
+            at_in_history = b->undo_redo_state.at_in_history;
+            isRedo = false;
+            block = get_undo_block(&b->undo_redo_state);
+        }
+
+        //NOTE: Ctrl Y -> copy text to clipboard
+        if(global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown && global_platformInput.keyStates[PLATFORM_KEY_Y].pressedCount > 0) 
+        {
+            at_in_history = b->undo_redo_state.at_in_history;
+            block = get_redo_block(&b->undo_redo_state);
+        }
+
+        if(block) {
+            if(b->save_at_in_history < 0) {
+                b->save_at_in_history = at_in_history;
+            }
+
+            block->byteAt;
+            block->string;
+            block->stringLength;
+
+            bool shouldInsert = true;
+
+            UndoRedo_BlockType commandType = block->type;
+
+            if(!isRedo) {
+                //NOTE: Reverse the command on the buffer block
+                if(commandType == UNDO_REDO_INSERT) {
+                    commandType = UNDO_REDO_DELETE;
+                } else {
+                    assert(commandType == UNDO_REDO_DELETE);
+                    commandType = UNDO_REDO_INSERT;
+                }
+            } 
+
+            if(open_buffer) {
+                open_buffer->moveVertical_xPos = -1;
+
+                //NOTE: Check if it is up to date based on history index
+                // if(b->undo_redo_state.at_in_history == b->save_at_in_history) {
+                //     open_buffer->is_up_to_date = true;
+                // } else {
+                //     open_buffer->is_up_to_date = false;
+                // }
+
+                open_buffer->is_up_to_date = false;
+                
+                open_buffer->should_scroll_to = true;
+                end_select(selectable_state);
+            }
+
+            if(commandType == UNDO_REDO_INSERT) { //NOTE: Insert
+                addTextToBuffer(b, block->string, block->byteAt, false);
+            } else {
+                assert(commandType == UNDO_REDO_DELETE); //NOTE: Delete
+
+                removeTextFromBuffer(b, block->byteAt, block->stringLength, false);
+                b->cursorAt_inBytes = block->byteAt;
+
+            }
+        }
+        
+    }
+
     //NOTE: Ctrl C -> copy text to clipboard
     if(global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown && global_platformInput.keyStates[PLATFORM_KEY_C].pressedCount > 0 && selectable_state->is_active) 
     {
