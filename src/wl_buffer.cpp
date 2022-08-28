@@ -15,7 +15,6 @@ typedef struct {
 	u32 gapBuffer_startAt;
 
 	UndoRedoState undo_redo_state;
-	bool is_undoing_or_redoing; //NOTE: See if the buffer is still in saved state if return to end of history
 
 } WL_Buffer;
 
@@ -51,6 +50,10 @@ static void wl_emptyBuffer(WL_Buffer *b) {
 
 static void makeGapBuffer_(WL_Buffer *b, int byteStart, int gapSize) {
 
+	/*Gap Buffer always assumes the start of the gap buffer is at the cursor position
+
+	*/
+
 	if(!b->bufferMemory) {
 		b->bufferMemory = (u8 *)platform_alloc_memory(gapSize, true);
 		b->bufferSize_inBytes = gapSize;
@@ -68,7 +71,7 @@ static void makeGapBuffer_(WL_Buffer *b, int byteStart, int gapSize) {
 	for(int i = (b->bufferSize_inUse_inBytes - 1); i >= byteStart; i--) {
 		b->bufferMemory[i + gapSize] = b->bufferMemory[i];
 	}
-
+	assert(byteStart < 10000);
 	b->gapBuffer_startAt = byteStart;
 	b->gapBuffer_endAt = b->gapBuffer_startAt + gapSize; 
 
@@ -80,16 +83,21 @@ static void makeGapBuffer_(WL_Buffer *b, int byteStart, int gapSize) {
 
 static void addTextToBuffer(WL_Buffer *b, char *str, int indexStart, bool should_add_to_history = true) {
 
+#if !DEBUG_BUILD
+	if(indexStart != b->cursorAt_inBytes) {
+		endGapBuffer(b);
+	}
+#endif
+
 	u32 strSize_inBytes = easyString_getSizeInBytes_utf8(str); 
 
 	if(strSize_inBytes > 0) {
 
 		if(should_add_to_history) {
-			b->is_undoing_or_redoing = false;
 			push_block(&b->undo_redo_state, UNDO_REDO_INSERT, b->cursorAt_inBytes, nullTerminate(str, strSize_inBytes), strSize_inBytes);
 		}
 		
-		int gapBufferSize = b->gapBuffer_endAt - b->gapBuffer_startAt;
+		int gapBufferSize = (int)b->gapBuffer_endAt - (int)b->gapBuffer_startAt;
 
 		if(gapBufferSize < strSize_inBytes) {
 			//NOTE: Make gap buffer bigger
@@ -104,7 +112,7 @@ static void addTextToBuffer(WL_Buffer *b, char *str, int indexStart, bool should
 		}
 
 		b->gapBuffer_startAt += strSize_inBytes;
-		b->cursorAt_inBytes += strSize_inBytes;
+		b->cursorAt_inBytes = indexStart + strSize_inBytes;
 	}
 }
 
@@ -133,6 +141,12 @@ static void endGapBuffer(WL_Buffer *b) {
 
 
 static void removeTextFromBuffer(WL_Buffer *b, int bytesStart, int toRemoveCount_inBytes, bool should_add_to_history = true) {
+	
+#if !DEBUG_BUILD
+	if(bytesStart != b->cursorAt_inBytes) {
+		endGapBuffer(b);
+	}
+#endif
 
 	//NOTE: See if has an active gap
 	int gapDiff = b->gapBuffer_endAt - b->gapBuffer_startAt;
@@ -146,11 +160,13 @@ static void removeTextFromBuffer(WL_Buffer *b, int bytesStart, int toRemoveCount
 		b->gapBuffer_startAt -= toRemoveCount_inBytes;
 	}
 
+	assert(b->gapBuffer_startAt < 100000);
 	if(should_add_to_history) {
-		b->is_undoing_or_redoing = false;
 		//NOTE: only add if this is a new command, not a repeat of the text 
 		push_block(&b->undo_redo_state, UNDO_REDO_DELETE, b->gapBuffer_startAt, nullTerminate((char *)(b->bufferMemory + b->gapBuffer_startAt), toRemoveCount_inBytes), toRemoveCount_inBytes);
 	} 
+
+	 b->cursorAt_inBytes = bytesStart;
 	
 }
 

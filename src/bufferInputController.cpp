@@ -331,11 +331,6 @@ static void process_buffer_controller(EditorState *editorState, WL_Open_Buffer *
         }
 
         if(block) {
-            if(!b->is_undoing_or_redoing) {
-                //NOTE: Take history mark
-
-                b->is_undoing_or_redoing = true;
-            }
 
             block->byteAt;
             block->string;
@@ -358,28 +353,36 @@ static void process_buffer_controller(EditorState *editorState, WL_Open_Buffer *
             if(open_buffer) {
                 open_buffer->moveVertical_xPos = -1;
 
-                //NOTE: Check if it is up to date based on history index
-                // if(b->undo_redo_state.at_in_history == b->save_at_in_history) {
-                //     open_buffer->is_up_to_date = true;
-                // } else {
-                //     open_buffer->is_up_to_date = false;
-                // }
+                assert(block->id > 0);
 
-                open_buffer->is_up_to_date = false;
+                u32 id_to_check = (isRedo) ? block->id : (block->id -1);
+
+                //NOTE: Check if it is up to date based on the id we saved at
+                if(open_buffer->current_save_undo_redo_id == id_to_check) {
+                    open_buffer->is_up_to_date = true;
+                } else {
+                    open_buffer->is_up_to_date = false;
+                }
                 
                 open_buffer->should_scroll_to = true;
                 end_select(selectable_state);
+            }   
+
+            if(block->byteAt != b->cursorAt_inBytes) {
+                endGapBuffer(b);
             }
 
             if(commandType == UNDO_REDO_INSERT) { //NOTE: Insert
+                
                 addTextToBuffer(b, block->string, block->byteAt, false);
             } else {
                 assert(commandType == UNDO_REDO_DELETE); //NOTE: Delete
-
+            
                 removeTextFromBuffer(b, block->byteAt, block->stringLength, false);
-                b->cursorAt_inBytes = block->byteAt;
 
             }
+
+            open_buffer->should_scroll_to = true;
         }
         
     }
@@ -420,8 +423,8 @@ static void process_buffer_controller(EditorState *editorState, WL_Open_Buffer *
             }
 
             u32 bytesOfPrevRune = 1;
-            removeTextFromBuffer(b, b->cursorAt_inBytes - 1, bytesOfPrevRune);
-            b->cursorAt_inBytes -= bytesOfPrevRune;
+            removeTextFromBuffer(b, b->cursorAt_inBytes - bytesOfPrevRune, bytesOfPrevRune);
+           
 
             if(open_buffer) {
                 open_buffer->is_up_to_date = false;

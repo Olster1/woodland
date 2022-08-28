@@ -63,7 +63,7 @@ typedef struct {
 
 	//NOTE: What's selected in the buffer
 	Selectable_State selectable_state;
-
+	u32 current_save_undo_redo_id;
 
 	EasyAst ast;
  
@@ -374,7 +374,10 @@ static WL_Open_Buffer *open_file_and_add_to_window(EditorState *editorState, cha
 		} 
 		//TODO: eventually we'll want to check all different encodings
 
-		addTextToBuffer(b, start_of_text, b->cursorAt_inBytes, open_buffer->is_up_to_date);
+		bool should_add_to_history = false; //NOTE: Shouldn't add this to the history since we are opening a file, and don't want to undo this from the buffer
+		addTextToBuffer(b, start_of_text, b->cursorAt_inBytes, should_add_to_history);
+
+		// b->cursorAt_inBytes = 0;
 
 		open_buffer->file_name_utf8 = (char *)platform_wide_char_to_utf8_allocates_on_heap(file_name_wide_char);
 		open_buffer->name = getFileLastPortion(open_buffer->file_name_utf8);
@@ -639,10 +642,9 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 			open_buffer->name = getFileLastPortion(open_buffer->file_name_utf8);
 			open_buffer->is_up_to_date = true;
 
-
+			//NOTE: Update the save position in the redo buffer so we know when we're back to a save position
+			open_buffer->current_save_undo_redo_id = open_buffer->buffer.undo_redo_state.idAt;
 		}
-
-		
 	}
 
 
