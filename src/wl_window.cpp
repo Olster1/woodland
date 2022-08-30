@@ -10,8 +10,7 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 	float handle_width = 10;
 	Rect2f bounds0 = make_rect2f(window_bounds.maxX - handle_width,  window_bounds.minY, window_bounds.maxX + handle_width, window_bounds.maxY);
 
-
-	if(editorState->window_count_used > 1 && window_index < (editorState->window_count_used - 1) && in_rect2f_bounds(bounds0, mouse_point_top_left_origin) && global_platformInput.keyStates[PLATFORM_MOUSE_LEFT_BUTTON].pressedCount > 0)
+	if(editorState->mode_ == MODE_EDIT_BUFFER && editorState->window_count_used > 1 && window_index < (editorState->window_count_used - 1) && in_rect2f_bounds(bounds0, mouse_point_top_left_origin) && global_platformInput.keyStates[PLATFORM_MOUSE_LEFT_BUTTON].pressedCount > 0)
 	{
 		try_begin_interaction(&editorState->ui_state, WL_INTERACTION_RESIZE_WINDOW, window_index);
 	}
@@ -117,7 +116,7 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 	size_t closest_click_buffer_point = 0;
 	float closest_click_distance = FLT_MAX;
 
-	bool tried_clicking = !has_active_interaction(&editorState->ui_state) && global_platformInput.keyStates[PLATFORM_MOUSE_LEFT_BUTTON].pressedCount > 0;
+	bool tried_clicking = editorState->mode_ == MODE_EDIT_BUFFER && !has_active_interaction(&editorState->ui_state) && global_platformInput.keyStates[PLATFORM_MOUSE_LEFT_BUTTON].pressedCount > 0;
 
 	while(parsing) {
 		bool renderToken = true;

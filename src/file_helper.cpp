@@ -1,3 +1,5 @@
+//TODO: This isn't utf8 safe 
+
 char *getFileLastPortion_(char *buffer, int bufferLen, char *at, Memory_Arena *arena) {
     char *recent = at;
     while(*at) {

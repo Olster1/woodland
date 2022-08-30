@@ -38,7 +38,7 @@ static void push_block(UndoRedoState *state, UndoRedo_BlockType type, size_t byt
 
     if(state->block_count >= state->total_block_count) {
         state->total_block_count += 32;
-        state->history =(UndoRedoBlock *)easyPlatform_reallocMemory(state->history, state->block_count, state->total_block_count);
+        state->history =(UndoRedoBlock *)easyPlatform_reallocMemory(state->history, state->block_count*sizeof(UndoRedoBlock), state->total_block_count*sizeof(UndoRedoBlock));
     }
 
     UndoRedoBlock block = {};

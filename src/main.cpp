@@ -175,16 +175,18 @@ void drawAndUpdateBufferSelection(EditorState *editorState, Renderer *renderer, 
 	//NOTE: Update the single search buffer
 	process_buffer_controller(editorState, NULL, &editorState->searchBar.buffer, BUFFER_SIMPLE, &editorState->searchBar.selectable_state);
 	//NOTE: Draw the search text
-	draw_single_search(&editorState->searchBar, renderer, font, fontScale, color, xAt, yAt + 0.5f*spacing, editorState->color_palette.standard);
+	char *queryString = draw_single_search(&editorState->searchBar, renderer, font, fontScale, color, xAt, yAt + 0.5f*spacing, editorState->color_palette.standard);
 	
-	//NOTE: 
+	//NOTE: We draw a cursor in draw single search so we reset it 
 	pushShader(renderer, &sdfFontShader);
 
 	//NOTE: Move down a line to now draw all the buffers
 	yAt -= spacing;
 
+
 	for(int i = 0; i < editorState->buffer_count_used; i++) {
 		WL_Open_Buffer *b = &editorState->buffers_loaded[i];
+		
 
 		char *nameToDraw = b->name;
 
@@ -193,49 +195,54 @@ void drawAndUpdateBufferSelection(EditorState *editorState, Renderer *renderer, 
 			//NOTE: If nameToDraw is null, this is an unsaved file so we don't have a file name for it
 		}
 
-		//NOTE: Push the outline of the box, we don't draw it since we want to batch the draw calls together
-		rectsToDraw[i] = make_rect2f(0, yAt, windowWidth, yAt + spacing);
+		//NOTE: See if this buffer matches the search query
+		bool in_search_query = easyString_string_contains_utf8(nameToDraw, queryString);
+		 if(in_search_query || easyString_getSizeInBytes_utf8(queryString) == 0) {
+
+			//NOTE: Push the outline of the box, we don't draw it since we want to batch the draw calls together
+			rectsToDraw[i] = make_rect2f(0, yAt, windowWidth, yAt + spacing);
 
 
-		if(editorState->ui_state.use_mouse && in_rect2f_bounds(rectsToDraw[i], make_float2(global_platformInput.mouseX, -global_platformInput.mouseY)))
-		{
+			if(editorState->ui_state.use_mouse && in_rect2f_bounds(rectsToDraw[i], make_float2(global_platformInput.mouseX, -global_platformInput.mouseY)))
+			{
 
-			//NOTE: If hovering over the box, set it to the index
-			editorState->selectionIndex_forDropDown = i;
+				//NOTE: If hovering over the box, set it to the index
+				editorState->selectionIndex_forDropDown = i;
 
-			Ui_Type uiType = WL_INTERACTION_SELECT_DROP_DOWN;
-			if(global_platformInput.keyStates[PLATFORM_MOUSE_LEFT_BUTTON].pressedCount > 0) {
-				//NOTE: Try begin an interaction with selecting a menu drop down
-				try_begin_interaction(&editorState->ui_state, uiType, i);
+				Ui_Type uiType = WL_INTERACTION_SELECT_DROP_DOWN;
+				if(global_platformInput.keyStates[PLATFORM_MOUSE_LEFT_BUTTON].pressedCount > 0) {
+					//NOTE: Try begin an interaction with selecting a menu drop down
+					try_begin_interaction(&editorState->ui_state, uiType, i);
+				}
+				
+				//NOTE: see if the user released on this id 
+				if(global_platformInput.keyStates[PLATFORM_MOUSE_LEFT_BUTTON].releasedCount > 0 && is_same_interaction(&editorState->ui_state, uiType, i)) {
+					//NOTE: Open the buffer now to the one selected
+					WL_Window *w = &editorState->windows[editorState->active_window_index];
+
+					//NOTE: Switch buffer to the new buffer the user selected
+					w->buffer_index = editorState->selectionIndex_forDropDown;
+
+					//NOTE: Exit the dropdown when we press enter
+					set_editor_mode(editorState, MODE_EDIT_BUFFER);
+				}
 			}
 			
-			//NOTE: see if the user released on this id 
-			if(global_platformInput.keyStates[PLATFORM_MOUSE_LEFT_BUTTON].releasedCount > 0 && is_same_interaction(&editorState->ui_state, uiType, i)) {
-				//NOTE: Open the buffer now to the one selected
-				WL_Window *w = &editorState->windows[editorState->active_window_index];
+			if(i == editorState->selectionIndex_forDropDown) {
+				//NOTE: This is the selection we're currently on so draw a different outline color
+				colors[i] = editorState->color_palette.function;
+			} else {
+				colors[i] = editorState->color_palette.standard;
+			} 
 
-				//NOTE: Switch buffer to the new buffer the user selected
-				w->buffer_index = editorState->selectionIndex_forDropDown;
+			
+			
+			//NOTE: Draw the text
+			draw_text(renderer, font, nameToDraw, xAt, yAt + 0.5f*spacing, fontScale, color); 
 
-				//NOTE: Exit the dropdown when we press enter
-				set_editor_mode(editorState, MODE_EDIT_BUFFER);
-			}
+			
+			yAt -= spacing;
 		}
-		
-		if(i == editorState->selectionIndex_forDropDown) {
-			//NOTE: This is the selection we're currently on so draw a different outline color
-			colors[i] = editorState->color_palette.function;
-		} else {
-			colors[i] = editorState->color_palette.standard;
-		} 
-
-		
-		
-		//NOTE: Draw the text
-		draw_text(renderer, font, nameToDraw, xAt, yAt + 0.5f*spacing, fontScale, color); 
-
-		
-		yAt -= spacing;
 
 	}
 
@@ -769,7 +776,7 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 
 				
 
-				draw_wl_window(editorState, w, renderer, is_active, windowWidth, windowHeight, editorState->font, editorState->color_palette.standard, editorState->fontScale, i, mouse_point_top_left_origin);
+				
 			}
 		} break;
 		case MODE_BUFFER_SELECT: {
@@ -822,7 +829,19 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 		} break;
 	}
 
+	
+	for(int i = 0; i < editorState->window_count_used; ++i) {
+		WL_Window *w = &editorState->windows[i];
 
+		WL_Open_Buffer *open_buffer = &editorState->buffers_loaded[w->buffer_index];
+
+		WL_Buffer *b = &open_buffer->buffer;
+
+		bool is_active = (i == editorState->active_window_index);
+
+		draw_wl_window(editorState, w, renderer, is_active, windowWidth, windowHeight, editorState->font, editorState->color_palette.standard, editorState->fontScale, i, mouse_point_top_left_origin);
+
+	}
 
 	
 	//////////////////////////////////////////////////////// 

@@ -122,6 +122,8 @@ int easyString_stringsMatch_withCount(char *a, int aLength, char *b, int bLength
 int easyString_stringsMatch_null_and_count(char *a, char *b, int bLen);
 int easyString_stringsMatch_nullTerminated(char *a, char *b);
 
+int easyString_string_contains_utf8(char *string, char *sub_string);
+
 
 ///////////////////////*********** Implementation starts here **************////////////////////
 
@@ -320,6 +322,49 @@ int easyString_stringsMatch_null_and_count(char *a, char *b, int bLen) {
 
 int easyString_stringsMatch_nullTerminated(char *a, char *b) {
     int result = easyString_stringsMatch_withCount(a, easyString_getStringLength_utf8(a), b, easyString_getStringLength_utf8(b));
+    return result;
+}
+
+//NOTE: Both strings must be null terminated
+int easyString_string_contains_utf8(char *string, char *sub_string) {
+	int result = 1;
+	
+	char *at = string;
+
+    int index_in_sub_string = 0;
+    while(*at && result > 0) {
+		if(index_in_sub_string == 0) {
+			if(*sub_string) {
+				if(sub_string[0] == *at) {
+					//NOTE: Start the match
+					index_in_sub_string++;
+				}
+			} else {
+				//NOTE: Has no substring so no matches
+				result = 0;
+				break;
+			}
+		} else if(sub_string[index_in_sub_string]) { //NOTE: Has a substring character left to match
+			//NOTE: Check if the substring is still matching
+			if(sub_string[index_in_sub_string] == *at) {
+				//NOTE: advance the query string index
+				index_in_sub_string++;
+			} else {
+				//NOTE: Query string doesn't match so return false
+				result = 0;
+				break;
+			}
+		} else {
+			break;
+		}
+
+
+        at++;
+    }
+
+	if(result && easyString_getSizeInBytes_utf8(sub_string) != index_in_sub_string) {
+		result = false;
+	}
     return result;
 }
 
