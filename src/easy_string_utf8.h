@@ -327,45 +327,58 @@ int easyString_stringsMatch_nullTerminated(char *a, char *b) {
 
 //NOTE: Both strings must be null terminated
 int easyString_string_contains_utf8(char *string, char *sub_string) {
-	int result = 1;
-	
+	int result = false;
+
 	char *at = string;
 
-    int index_in_sub_string = 0;
-    while(*at && result > 0) {
-		if(index_in_sub_string == 0) {
-			if(*sub_string) {
-				if(sub_string[0] == *at) {
-					//NOTE: Start the match
-					index_in_sub_string++;
-				}
-			} else {
-				//NOTE: Has no substring so no matches
-				result = 0;
-				break;
-			}
-		} else if(sub_string[index_in_sub_string]) { //NOTE: Has a substring character left to match
-			//NOTE: Check if the substring is still matching
-			if(sub_string[index_in_sub_string] == *at) {
-				//NOTE: advance the query string index
-				index_in_sub_string++;
-			} else {
-				//NOTE: Query string doesn't match so return false
-				result = 0;
-				break;
-			}
-		} else {
-			break;
-		}
+    while(at[0] && sub_string[0] && !result) {
+		//NOTE: We got an initial match at the start, so see if the rest matches
+		if(*at == sub_string[0]) {
+			char *strMatch = at;
+			char *sub_str_at = sub_string;
 
+			bool temp_result = true;
+			//NOTE: Start a string match
+			while(*strMatch && *sub_str_at) {
+				//NOTE: Try break the true value
+				temp_result &= (strMatch[0] == sub_str_at[0]);
+				strMatch++;
+				sub_str_at++;
+			}
+
+			//NOTE: Check if the text string (not sub string) ran out first
+			if(!strMatch[0] && sub_str_at[0]) {
+				temp_result = false;
+			} else if(temp_result) {
+				//NOTE: We got a match
+				result = true;
+				break;
+			}
+		}
 
         at++;
     }
 
-	if(result && easyString_getSizeInBytes_utf8(sub_string) != index_in_sub_string) {
-		result = false;
-	}
     return result;
+}
+
+struct String_Query_Search_Results {
+	size_t byteOffsets[512];//NOTE Dynamic Array of byte offsets
+	int byteOffsetCount; 
+	int byteOffsetTotalCount;
+};
+
+
+static String_Query_Search_Results string_utf8_find_sub_string(char *text, char *sub_string) {
+	//NOTE: boyer moore algorithm
+	String_Query_Search_Results result = {};
+
+	// if(byteOffsetCount >= byteOffsetTotalCount) {
+	// 	byteOffsetTotalCount += 32;
+	// 	state->history =(int *)easyPlatform_reallocMemory(result->history, state->block_count*sizeof(int), state->total_block_count*sizeof(int));
+	// }
+
+
 }
 
 #endif // END OF IMPLEMENTATION
