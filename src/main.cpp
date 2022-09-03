@@ -120,6 +120,8 @@ typedef struct {
 	char *lastQueryString;
 	int searchIndexAt;
 
+	float line_spacing;
+
 } EditorState;
 
 #include "single_search.cpp"
@@ -181,10 +183,14 @@ void drawAndUpdateBufferSelection(EditorState *editorState, Renderer *renderer, 
 
 	float spacing = -yAt;
 
+	//NOTE: Draw the backing
+	pushShader(renderer, &textureShader);
+	pushTexture(renderer, global_white_texture, make_float3(0.5f*windowWidth, 0.5f*yAt, 1.0f), make_float2(windowWidth, -1*yAt), editorState->color_palette.background, make_float4(0, 1, 0, 1));
+
 	//NOTE: Update the single search buffer
 	process_buffer_controller(editorState, NULL, &editorState->searchBar.buffer, BUFFER_SIMPLE, &editorState->searchBar.selectable_state);
 	//NOTE: Draw the search text
-	char *queryString = draw_single_search(&editorState->searchBar, renderer, font, fontScale, color, xAt, yAt + 0.5f*spacing, editorState->color_palette.standard);
+	char *queryString = draw_single_search(&editorState->searchBar, renderer, font, fontScale, editorState->color_palette.variable, xAt, yAt + 0.5f*spacing, editorState->color_palette.standard, "Search: ");
 	
 	//NOTE: We draw a cursor in draw single search so we reset it 
 	pushShader(renderer, &sdfFontShader);
@@ -496,6 +502,8 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
  		
 		editorState->ui_state.id.id = -1;
 
+		editorState->line_spacing = 1.6f; //NOTE: How big it is between lines
+
 		{
 			editorState->color_palette.background = color_hexARGBTo01(0xFF161616);
 			editorState->color_palette.standard =  color_hexARGBTo01(0xFFA08563);
@@ -672,6 +680,15 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 
 	float2 mouse_point_top_left_origin = make_float2(global_platformInput.mouseX, global_platformInput.mouseY);	
 	float2 mouse_point_top_left_origin_01 = make_float2(global_platformInput.mouseX / windowWidth, global_platformInput.mouseY / windowHeight);
+	
+	//NOTE: Update the active buffer no matter if in different mode
+	WL_Window *w = &editorState->windows[editorState->active_window_index];
+	WL_Open_Buffer *open_buffer = &editorState->buffers_loaded[w->buffer_index];
+	WL_Buffer *b = &open_buffer->buffer;
+	{
+		open_buffer->scroll_pos = lerp_float2(open_buffer->scroll_pos, open_buffer->scroll_target_pos, 0.3f);
+	}
+	
 
 	switch(editorState->mode_) {
 		case MODE_EDIT_BUFFER: {	
@@ -701,92 +718,36 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 				}
 			}
 
-			for(int i = 0; i < editorState->window_count_used; ++i) {
-				WL_Window *w = &editorState->windows[i];
+			//NOTE: Update the active buffer
+			{	
 
-				WL_Open_Buffer *open_buffer = &editorState->buffers_loaded[w->buffer_index];
-
-				WL_Buffer *b = &open_buffer->buffer;
-				
-
-				bool is_active = (i == editorState->active_window_index);
-
-				if(is_active) 
-				{	
-
-					bool user_scrolled = false;
-					if(get_abs_value(global_platformInput.mouseScrollX) > 0 || get_abs_value(global_platformInput.mouseScrollY) > 0) {
-						open_buffer->should_scroll_to = false;
-						user_scrolled = true;
-					}
-
-					open_buffer->scroll_pos = lerp_float2(open_buffer->scroll_pos, open_buffer->scroll_target_pos, 0.3f);
-
-					if(!open_buffer->should_scroll_to) {
-						float speed_factor = 10.0f;
-
-						if(user_scrolled) {
-							open_buffer->scroll_dp = make_float2(speed_factor*global_platformInput.mouseScrollX, -speed_factor*global_platformInput.mouseScrollY);
-						}
-
-						open_buffer->scroll_pos.x += dt*open_buffer->scroll_dp.x;
-						open_buffer->scroll_pos.y += dt*open_buffer->scroll_dp.y; 						
-
-						float drag = 0.9f;
-
-						//TODO: This should be in a fixed update loop
-
-						open_buffer->scroll_dp.x *= drag;
-						open_buffer->scroll_dp.y *= drag;
-					}
-
-
-					Rect2f window_bounds = make_rect2f(w->bounds_.minX*windowWidth, w->bounds_.minY*windowWidth, w->bounds_.maxX*windowWidth, w->bounds_.maxY*windowHeight);
-
-
-					if(open_buffer->scroll_pos.x < 0) {
-						open_buffer->scroll_pos.x = 0;
-						open_buffer->scroll_dp.x = 0;
-					}	
-
-					if(open_buffer->scroll_pos.y < 0) {
-						open_buffer->scroll_pos.y = 0;
-						open_buffer->scroll_dp.y = 0;
-					}
-
-					float2 window_scale = get_scale_rect2f(window_bounds);
-
-					float2 padding = make_float2(50, 0.5f*window_scale.y);
-
-					float max_w = (open_buffer->max_scroll_bounds.x - window_scale.x);
-
-					if(max_w < 0) { max_w = 0; padding.x = 0; }
-
-					max_w += padding.x;
-
-					if(open_buffer->scroll_pos.x > max_w) {
-						open_buffer->scroll_pos.x = max_w;
-						open_buffer->scroll_dp.x = 0;
-					}
-
-					float max_h = (open_buffer->max_scroll_bounds.y - window_scale.y);
-
-					if(max_h < 0) { max_h = 0; padding.y = 0; }
-
-					max_h += padding.y;
-
-					if(open_buffer->scroll_pos.y > max_h) {
-						open_buffer->scroll_pos.y = max_h;
-						open_buffer->scroll_dp.y = 0;
-					}
-
-					
-					process_buffer_controller(editorState, open_buffer, b, BUFFER_ALL, &open_buffer->selectable_state);
+				//NOTE: Check if the user scrolled, if so stop trying to target a cursor position
+				bool user_scrolled = false;
+				if(get_abs_value(global_platformInput.mouseScrollX) > 0 || get_abs_value(global_platformInput.mouseScrollY) > 0) {
+					open_buffer->should_scroll_to = false;
+					user_scrolled = true;
 				}
+		
 
-				
+				if(!open_buffer->should_scroll_to) {
+					float speed_factor = 10.0f;
 
+					if(user_scrolled) {
+						open_buffer->scroll_dp = make_float2(speed_factor*global_platformInput.mouseScrollX, -speed_factor*global_platformInput.mouseScrollY);
+					}
+
+					open_buffer->scroll_pos.x += dt*open_buffer->scroll_dp.x;
+					open_buffer->scroll_pos.y += dt*open_buffer->scroll_dp.y; 						
+
+					float drag = 0.9f;
+
+					//TODO: This should be in a fixed update loop
+
+					open_buffer->scroll_dp.x *= drag;
+					open_buffer->scroll_dp.y *= drag;
+				}
 				
+				process_buffer_controller(editorState, open_buffer, b, BUFFER_ALL, &open_buffer->selectable_state);
 			}
 		} break;
 		case MODE_FIND: {
@@ -837,7 +798,7 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 			//NOTE: Update the single search buffer
 			process_buffer_controller(editorState, NULL, &editorState->searchBar.buffer, BUFFER_SIMPLE, &editorState->searchBar.selectable_state);
 			//NOTE: Draw the search text
-			char *queryString = draw_single_search(&editorState->searchBar, renderer, &editorState->font, editorState->fontScale, editorState->color_palette.standard, xAt, yAt + 0.5f*spacing, editorState->color_palette.standard);
+			char *queryString = draw_single_search(&editorState->searchBar, renderer, &editorState->font, editorState->fontScale, editorState->color_palette.variable, xAt, yAt + 0.5f*spacing, editorState->color_palette.standard, "Find: ");
 			if(*queryString) { //NOTE: Check if it is not an empty string
 				//NOTE: OnChanged Event
 				if(!editorState->lastQueryString || !easyString_stringsMatch_nullTerminated(queryString, editorState->lastQueryString)) {
@@ -906,9 +867,54 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 		} break;
 	}
 
+	//NOTE: Clamp the buffer position to the ends so doesnt shoot off screen. 
+	//		We do it here because we want this to apply to even when we're not in a buffer edit mode
+	{
+		
+		Rect2f window_bounds = make_rect2f(w->bounds_.minX*windowWidth, w->bounds_.minY*windowWidth, w->bounds_.maxX*windowWidth, w->bounds_.maxY*windowHeight);
+		
+		//NOTE: Clamp the buffer position
+		if(open_buffer->scroll_pos.x < 0) {
+			open_buffer->scroll_pos.x = 0;
+			open_buffer->scroll_dp.x = 0;
+		}	
+
+		if(open_buffer->scroll_pos.y < 0) {
+			open_buffer->scroll_pos.y = 0;
+			open_buffer->scroll_dp.y = 0;
+		}
+
+		float2 window_scale = get_scale_rect2f(window_bounds);
+
+		float2 padding = make_float2(50, 0.5f*window_scale.y);
+
+		float max_w = (open_buffer->max_scroll_bounds.x - window_scale.x);
+
+		if(max_w < 0) { max_w = 0; padding.x = 0; }
+
+		max_w += padding.x;
+
+		if(open_buffer->scroll_pos.x > max_w) {
+			open_buffer->scroll_pos.x = max_w;
+			open_buffer->scroll_dp.x = 0;
+		}
+
+		float max_h = (open_buffer->max_scroll_bounds.y - window_scale.y);
+
+		if(max_h < 0) { max_h = 0; padding.y = 0; }
+
+		max_h += padding.y;
+
+		if(open_buffer->scroll_pos.y > max_h) {
+			open_buffer->scroll_pos.y = max_h;
+			open_buffer->scroll_dp.y = 0;
+		}
+
+	}
 	
 	for(int i = 0; i < editorState->window_count_used; ++i) {
 		WL_Window *w = &editorState->windows[i];
+		
 
 		WL_Open_Buffer *open_buffer = &editorState->buffers_loaded[w->buffer_index];
 

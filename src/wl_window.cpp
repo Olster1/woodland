@@ -40,32 +40,7 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 	}
 
 	
-		
-	float buffer_title_height = font.fontHeight*fontScale;
-	{		
-		//NOTE: Draw the outline around the file name
-		float2 scale = window_scale;
-		float2 centre = get_centre_rect2f(window_bounds);
-		scale.y = buffer_title_height;
-		centre.y = -0.5f*buffer_title_height;
-		pushRectOutline(renderer, make_float3(centre.x, centre.y, 1.0f), scale, editorState->color_palette.standard);
-
-		//NOTE: Draw the name of the file
-		pushShader(renderer, &sdfFontShader);
-
-		//  
-
-		char *name_str = open_buffer->name;
-
-		if(!open_buffer->is_up_to_date) {
-
-			name_str = easy_createString_printf(&globalPerFrameArena, "%s  %s", open_buffer->name, "*");
-		}
-
-		
-		float title_offset = 5;
-		draw_text(renderer, &font, name_str, window_bounds.minX + title_offset, -0.5f*font.fontHeight*fontScale -window_bounds.minY - title_offset, fontScale, editorState->color_palette.standard);
-	}
+	pushShader(renderer, &sdfFontShader);
 
 
 	// EasyAst ast = easyAst_generateAst(, &globalPerFrameArena);
@@ -76,7 +51,8 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 
 	// OutputDebugStringA((LPCSTR)str);
 	// OutputDebugStringA((LPCSTR)"\n");
-	
+
+	float buffer_title_height = font.fontHeight*fontScale;
 	
 	float startX = window_bounds.minX - open_buffer->scroll_pos.x;
 	float startY = -1.0f*font.fontHeight*fontScale - buffer_title_height - window_bounds.minY + open_buffer->scroll_pos.y;
@@ -88,6 +64,8 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 
 	float cursorX = startX;
 	float cursorY = startY;
+
+	float newLineIncrement = font.fontHeight*fontScale*editorState->line_spacing;
 
 	bool newLine = true;
 
@@ -196,7 +174,6 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 
 			{
 				if(search_query) {
-					
 					//NOTE: Draw the highlighted search results
 					if(searchBufferAt < search_query->byteOffsetCount && memory_offset == search_query->byteOffsets[searchBufferAt]) {
 						//NOTE: Push the outline of the box, we don't draw it since we want to batch the draw calls together
@@ -229,7 +206,7 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 
 
 			if(rune == '\n' || rune == '\r') {
-				yAt -= font.fontHeight*fontScale;
+				yAt -= newLineIncrement;
 				xAt = startX;
 				newLine = true;
 
@@ -408,6 +385,34 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 		
 
 
+	}
+
+	if(get_editor_mode(editorState) == MODE_EDIT_BUFFER) {		
+		//NOTE: Draw the outline around the file name
+		float2 scale = window_scale;
+		float2 centre = get_centre_rect2f(window_bounds);
+		scale.y = buffer_title_height;
+		centre.y = -0.5f*buffer_title_height;
+		pushRectOutline(renderer, make_float3(centre.x, centre.y, 1.0f), scale, editorState->color_palette.background);
+		
+		pushShader(renderer, &rectOutlineShader);
+		pushRectOutline(renderer, make_float3(centre.x, centre.y, 1.0f), scale, editorState->color_palette.standard);
+
+		//NOTE: Draw the name of the file
+		pushShader(renderer, &sdfFontShader);
+
+		//  
+
+		char *name_str = open_buffer->name;
+
+		if(!open_buffer->is_up_to_date) {
+
+			name_str = easy_createString_printf(&globalPerFrameArena, "%s  %s", open_buffer->name, "*");
+		}
+
+		
+		float title_offset = 5;
+		draw_text(renderer, &font, name_str, window_bounds.minX + title_offset, -0.5f*font.fontHeight*fontScale -window_bounds.minY - title_offset, fontScale, editorState->color_palette.standard);
 	}
 
 
