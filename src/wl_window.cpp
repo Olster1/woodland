@@ -106,12 +106,23 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 
 	bool in_select = false;
 
+	//NOTE: Null if this isn't the active buffer
+	int searchBufferAt = 0;
+	String_Query_Search_Results *search_query = 0;
+
+	float2 *rectsToDraw_forSearch = 0;
+
 	Highlight_Array *highlight_array = 0;
 	if(is_active) {
 		highlight_array = init_highlight_array(&globalPerFrameArena);
 
-
+		//NOTE: Get the highlight array ready
+		if(get_editor_mode(editorState) == MODE_FIND && editorState->current_search_reults.byteOffsetCount > 0) {
+			search_query = &editorState->current_search_reults;
+			rectsToDraw_forSearch = pushArray(&globalPerFrameArena, editorState->current_search_reults.byteOffsetCount, float2);
+		}
 	}
+	
 
 	size_t closest_click_buffer_point = 0;
 	float closest_click_distance = FLT_MAX;
@@ -181,6 +192,20 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 
 			} else {
 				drawing = false;
+			}
+
+			{
+				if(search_query) {
+					
+					//NOTE: Draw the highlighted search results
+					if(searchBufferAt < search_query->byteOffsetCount && memory_offset == search_query->byteOffsets[searchBufferAt]) {
+						//NOTE: Push the outline of the box, we don't draw it since we want to batch the draw calls together
+						rectsToDraw_forSearch[searchBufferAt] = make_float2(xAt, yAt);
+						searchBufferAt++;
+						
+					}
+				}
+				
 			}
 
 			//NOTE: Draw selectable overlay
@@ -340,10 +365,11 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 			}
 		} 
 
+		pushShader(renderer, &textureShader);
 
 		//NOTE: This is drawing the selectable overlay 
 		if(open_buffer->selectable_state.is_active) {
-
+			
 			for(int i = 0; i < highlight_array->number_of_rects; ++i) {
 				Hightlight_Rect *r = highlight_get_rectangle(highlight_array, i); 
 					
@@ -352,8 +378,6 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 
 				float draw_y = p.y + 0.25f*font.fontHeight*fontScale;
 
-				pushShader(renderer, &textureShader);
-
 				float4 color = editorState->color_palette.standard;
 
 				color.w = 0.3f;
@@ -361,6 +385,27 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 			}
 			
 		}
+		
+		if(rectsToDraw_forSearch) {
+			//NOTE: Get size of search string
+			float width = editorState->current_search_reults.sub_string_width*fontScale;
+			
+			float height = font.fontHeight*fontScale;
+			float4 color = editorState->color_palette.variable;
+
+			color.w = 0.5f;
+			//NOTE: Draw the highlighted search rectangles
+			for(int i = 0; i < editorState->current_search_reults.byteOffsetCount; ++i) {
+				float2 p = rectsToDraw_forSearch[i];
+
+				Rect2f r = make_rect2f(p.x, p.y, p.x + width, p.y + height);
+				
+				float2 c = get_centre_rect2f(r);
+				float2 s = get_scale_rect2f(r);
+				pushRectOutline(renderer, make_float3(c.x, c.y, 1.0f), s, color);
+			}
+		}
+		
 
 
 	}

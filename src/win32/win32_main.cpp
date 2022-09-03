@@ -365,6 +365,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
             keyType = PLATFORM_KEY_Y;
         } else if(vk_code == 'B') {
             keyType = PLATFORM_KEY_B;
+        } else if(vk_code == 'F') {
+            keyType = PLATFORM_KEY_F;
         } else if(vk_code == VK_SHIFT) {
             keyType = PLATFORM_KEY_SHIFT;
         } else if(vk_code == VK_F5) {
@@ -434,7 +436,7 @@ static void platform_copy_text_utf8_to_clipboard(char *text, size_t str_size_in_
         // size_t str_size_in_bytes = easyString_getSizeInBytes_utf8(text);
 
         // Allocate a global memory object for the text. 
-        HGLOBAL hglbCopy = GlobalAlloc(GMEM_MOVEABLE, (str_size_in_bytes + 1));
+        HGLOBAL hglbCopy = GlobalAlloc(GMEM_MOVEABLE, (str_size_in_bytes + 1)*sizeof(TCHAR));
              
         if (hglbCopy == NULL) { 
             MessageBoxA(0, "Couldn't allocate memory", "Clip Board Error", MB_OK);
@@ -443,13 +445,20 @@ static void platform_copy_text_utf8_to_clipboard(char *text, size_t str_size_in_
             // Lock the handle and copy the text to the buffer. 
 
             LPTSTR  lptstrCopy = (LPTSTR)GlobalLock(hglbCopy); 
-            memcpy(lptstrCopy, text, str_size_in_bytes); 
-            lptstrCopy[str_size_in_bytes] = '\0';    // null character 
 
-            GlobalUnlock(hglbCopy); 
+            if(lptstrCopy) {
+                memcpy(lptstrCopy, text, str_size_in_bytes); 
+                u8 *temp = (u8 *)lptstrCopy;
 
-            // Place the handle on the clipboard. 
-            SetClipboardData(CF_TEXT, hglbCopy); 
+                temp[str_size_in_bytes] = '\0';    // null character 
+
+                GlobalUnlock(hglbCopy); 
+
+                // Place the handle on the clipboard. 
+                SetClipboardData(CF_TEXT, hglbCopy); 
+            } else {
+                MessageBoxA(0, "Couldn't lock memory", "Clip Board Error", MB_OK);
+            }
         }
 
         CloseClipboard();

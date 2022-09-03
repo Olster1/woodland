@@ -12,7 +12,7 @@ static char *draw_single_search(Single_Search *search, Renderer *renderer, Font 
     Compiled_Buffer_For_Drawing buffer_to_draw = compileBuffer_toDraw(&search->buffer, &globalPerFrameArena, &search->selectable_state);
 
     pushShader(renderer, &sdfFontShader);
-    float2 cursor_pos = draw_text(renderer, font, (char *)buffer_to_draw.memory, xAt, yAt, fontScale, color, buffer_to_draw.cursor_at);
+    float2 cursor_pos = draw_text(renderer, font, (char *)buffer_to_draw.memory, xAt, yAt, fontScale, color, buffer_to_draw.cursor_at).cursorP;
 
     //NOTE: Draw the cursor now
     pushShader(renderer, &textureShader);

@@ -44,7 +44,7 @@ typedef enum {
 	MODE_BUFFER_SELECT,
 	MODE_FIND,
 	MODE_CALCULATE,
-	MODE_JAVASCRIPT_REPL
+	MODE_JAVASCRIPT_REPL,
 } EditorMode;
 
 typedef struct {
@@ -116,12 +116,21 @@ typedef struct {
 	
 	Single_Search searchBar;
 
+	String_Query_Search_Results current_search_reults;
+	char *lastQueryString;
+	int searchIndexAt;
+
 } EditorState;
 
 #include "single_search.cpp"
 
 static void set_editor_mode(EditorState *editorState, EditorMode mode) {
 	refresh_buffer(&editorState->searchBar);
+	if(editorState->lastQueryString) {
+		easyPlatform_freeMemory(editorState->lastQueryString);
+	}
+	editorState->lastQueryString = 0;
+	editorState->searchIndexAt = 0;
 	editorState->mode_ = mode;
 }
 
@@ -361,6 +370,8 @@ static WL_Open_Buffer *open_file_and_add_to_window(EditorState *editorState, cha
 		WL_Window *w = 0;
 		if(open_type == OPEN_FILE_INTO_NEW_WINDOW) {
 			w = open_new_window(editorState);	
+			//NOTE: Make this the active window now
+			editorState->active_window_index = editorState->window_count_used - 1;
 		} else if(open_type == OPEN_FILE_INTO_CURRENT_WINDOW) {
 			w = &editorState->windows[editorState->active_window_index];
 			w->buffer_index = open_new_backing_buffer(editorState);
@@ -368,7 +379,7 @@ static WL_Open_Buffer *open_file_and_add_to_window(EditorState *editorState, cha
 			assert(!"invalid code path"); 
 		}
 		
-
+		
 		WL_Open_Buffer *open_buffer = &editorState->buffers_loaded[w->buffer_index];
 
 		WL_Buffer *b = &open_buffer->buffer;
@@ -384,7 +395,7 @@ static WL_Open_Buffer *open_file_and_add_to_window(EditorState *editorState, cha
 		bool should_add_to_history = false; //NOTE: Shouldn't add this to the history since we are opening a file, and don't want to undo this from the buffer
 		addTextToBuffer(b, start_of_text, b->cursorAt_inBytes, should_add_to_history);
 
-		// b->cursorAt_inBytes = 0;
+		b->cursorAt_inBytes = 0;
 
 		open_buffer->file_name_utf8 = (char *)platform_wide_char_to_utf8_allocates_on_heap(file_name_wide_char);
 		open_buffer->name = getFileLastPortion(open_buffer->file_name_utf8);
@@ -480,9 +491,8 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 		//NOTE: Init the single search bar
 		init_single_search(&editorState->searchBar);
 
-		
-
-		
+		editorState->lastQueryString = 0;
+		editorState->searchIndexAt = 0;
  		
 		editorState->ui_state.id.id = -1;
 
@@ -777,6 +787,73 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 				
 
 				
+			}
+		} break;
+		case MODE_FIND: {
+			WL_Window *w = &editorState->windows[editorState->active_window_index];
+
+			WL_Open_Buffer *open_buffer = &editorState->buffers_loaded[w->buffer_index];
+
+			WL_Buffer *b = &open_buffer->buffer;
+
+
+			if(global_platformInput.keyStates[PLATFORM_KEY_ENTER].pressedCount > 0) {
+
+				endGapBuffer(b);
+
+				if(editorState->current_search_reults.byteOffsetCount > 0) {
+					//NOTE: Jump to next query point
+					editorState->searchIndexAt++;
+
+					if(editorState->searchIndexAt >= editorState->current_search_reults.byteOffsetCount) {
+						editorState->searchIndexAt = 0;
+					}
+
+					int offset = editorState->current_search_reults.byteOffsets[editorState->searchIndexAt];
+
+					b->cursorAt_inBytes = offset;
+					open_buffer->should_scroll_to = true;
+				}
+
+				
+			}
+
+			if(global_platformInput.keyStates[PLATFORM_KEY_ESCAPE].pressedCount > 0) {
+				//NOTE: Escape exits the buffer we're on
+				set_editor_mode(editorState, MODE_EDIT_BUFFER);
+			}
+
+			//NOTE: Draw the name of the file
+			pushShader(renderer, &sdfFontShader);
+
+			float16 orthoMatrix = make_ortho_matrix_top_left_corner(windowWidth, windowHeight, MATH_3D_NEAR_CLIP_PlANE, MATH_3D_FAR_CLIP_PlANE);
+			pushMatrix(renderer, orthoMatrix);
+
+			float xAt = 0;
+			float yAt = -2.0f*editorState->font.fontHeight*editorState->fontScale;
+			float spacing = -yAt;
+
+		
+			//NOTE: Update the single search buffer
+			process_buffer_controller(editorState, NULL, &editorState->searchBar.buffer, BUFFER_SIMPLE, &editorState->searchBar.selectable_state);
+			//NOTE: Draw the search text
+			char *queryString = draw_single_search(&editorState->searchBar, renderer, &editorState->font, editorState->fontScale, editorState->color_palette.standard, xAt, yAt + 0.5f*spacing, editorState->color_palette.standard);
+			if(*queryString) { //NOTE: Check if it is not an empty string
+				//NOTE: OnChanged Event
+				if(!editorState->lastQueryString || !easyString_stringsMatch_nullTerminated(queryString, editorState->lastQueryString)) {
+					if(editorState->lastQueryString) {
+						easyPlatform_freeMemory(editorState->lastQueryString);
+					}
+					Compiled_Buffer_For_Drawing buffer_to_draw = compileBuffer_toDraw(b, &globalPerFrameArena, &open_buffer->selectable_state);
+					//NOTE: Cache the query string
+					editorState->lastQueryString = easyPlatform_allocateStringOnHeap_nullTerminated(queryString);
+					editorState->current_search_reults = string_utf8_find_sub_string((char *)buffer_to_draw.memory, editorState->lastQueryString);
+					if(editorState->current_search_reults.byteOffsetCount > 0) {
+						editorState->current_search_reults.sub_string_width = font_getStringDimensions(renderer, &editorState->font, editorState->lastQueryString);
+					}
+				}
+			} else {
+				editorState->current_search_reults.byteOffsetCount = 0;
 			}
 		} break;
 		case MODE_BUFFER_SELECT: {

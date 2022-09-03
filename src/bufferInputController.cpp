@@ -4,10 +4,7 @@ Copy, Paste, write text, move cursor around
 
 */
 
-enum BufferControllerOption {
-    BUFFER_ALL,
-    BUFFER_SIMPLE //NOTE: Single line text box so you can't move up and down 
-};
+
 
 static bool optionCanMoveUp(BufferControllerOption option) {
     if(option == BUFFER_ALL) {
@@ -295,6 +292,19 @@ static void process_buffer_controller(EditorState *editorState, WL_Open_Buffer *
 
     }
 
+    //NOTE: Ctrl F -> open buffer chooser
+    if(global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown && global_platformInput.keyStates[PLATFORM_KEY_F].pressedCount > 0) 
+    {
+        if(editorState->mode_ == MODE_FIND){
+            set_editor_mode(editorState, MODE_EDIT_BUFFER);
+        } else {
+            set_editor_mode(editorState, MODE_FIND);
+        }
+        
+        editorState->ui_state.use_mouse = true;
+
+    }
+
     //NOTE: Ctrl V -> paste text from clipboard
     if(global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown && global_platformInput.keyStates[PLATFORM_KEY_V].pressedCount > 0) 
     {
@@ -398,6 +408,24 @@ static void process_buffer_controller(EditorState *editorState, WL_Open_Buffer *
 
     //NOTE: Any text added if not pressing ctrl
     if(global_platformInput.textInput_utf8[0] != '\0' && !global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown) {
+        if(option == BUFFER_SIMPLE) {
+            //NOTE: Don't add new lines to SIMPLE buffers
+            char *at = (char *)global_platformInput.textInput_utf8;
+            while(*at) {
+                if(*at == '\n' || *at == '\r') {
+                    //NOTE: Move everything down one byte
+                    char *temp = at;
+                    while(*temp) {
+                        temp[0] = temp[1];
+                        temp++;
+                    }
+                } else {
+                    at++;
+                }
+                
+            }
+            
+        }
         addTextToBuffer(b, (char *)global_platformInput.textInput_utf8, b->cursorAt_inBytes);
 
         if(open_buffer) {
@@ -422,7 +450,7 @@ static void process_buffer_controller(EditorState *editorState, WL_Open_Buffer *
                 open_buffer->moveVertical_xPos = -1;
             }
 
-            u32 bytesOfPrevRune = 1;
+            u32 bytesOfPrevRune = size_of_last_utf8_codepoint_in_bytes((char *)&b->bufferMemory[b->cursorAt_inBytes], b->cursorAt_inBytes);
             removeTextFromBuffer(b, b->cursorAt_inBytes - bytesOfPrevRune, bytesOfPrevRune);
            
 
@@ -442,7 +470,7 @@ static void process_buffer_controller(EditorState *editorState, WL_Open_Buffer *
                 open_buffer->moveVertical_xPos = -1;
             }
             
-            u32 bytesOfPrevRune = 1;
+            u32 bytesOfPrevRune = size_of_last_utf8_codepoint_in_bytes((char *)&b->bufferMemory[b->cursorAt_inBytes], b->cursorAt_inBytes);
 
             if(global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown) {
                 EasyToken token = peekTokenBackwards_tokenNotComplete((char *)(b->bufferMemory + (b->cursorAt_inBytes - 1)), (char *)b->bufferMemory);
@@ -483,7 +511,7 @@ static void process_buffer_controller(EditorState *editorState, WL_Open_Buffer *
 
         if(command == PLATFORM_KEY_RIGHT) {
 
-            u32 bytesOfNextRune = 1;
+            u32 bytesOfNextRune = size_of_next_utf8_codepoint_in_bytes((char *)&b->bufferMemory[b->cursorAt_inBytes]);
 
             endGapBuffer(b);
 

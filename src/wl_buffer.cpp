@@ -1,3 +1,7 @@
+enum BufferControllerOption {
+    BUFFER_ALL,
+    BUFFER_SIMPLE //NOTE: Single line text box so you can't move up and down or add newline to buffer
+};
 
 typedef struct {
 	s64 cursorAt_inBytes;
@@ -160,7 +164,6 @@ static void removeTextFromBuffer(WL_Buffer *b, int bytesStart, int toRemoveCount
 		b->gapBuffer_startAt -= toRemoveCount_inBytes;
 	}
 
-	assert(b->gapBuffer_startAt < 100000);
 	if(should_add_to_history) {
 		//NOTE: only add if this is a new command, not a repeat of the text 
 		push_block(&b->undo_redo_state, UNDO_REDO_DELETE, b->gapBuffer_startAt, nullTerminate((char *)(b->bufferMemory + b->gapBuffer_startAt), toRemoveCount_inBytes), toRemoveCount_inBytes);

@@ -270,9 +270,15 @@ static inline GlyphInfo easyFont_getGlyph(Font *font, u32 unicodePoint) {
     return glyph;
 }
 
-//NOTE: Returns cursor position
-static float2 draw_text(Renderer *renderer, Font *font, char *str, float startX, float yAt, float fontScale, float4 font_color, int cursor_in_bytes = 0) {
+struct DrawTextDetails {
+    float2 cursorP;
+    float2 size;
+};
+
+//NOTE: Returns cursor position and width
+static DrawTextDetails draw_text(Renderer *renderer, Font *font, char *str, float startX, float yAt, float fontScale, float4 font_color, int cursor_in_bytes = 0) {
     // float yAt = -0.5f*font->fontHeight*fontScale + yAt_;
+    DrawTextDetails result = {};
 
     bool newLine = true;
 
@@ -280,14 +286,14 @@ static float2 draw_text(Renderer *renderer, Font *font, char *str, float startX,
 
     char *at = str;
 
+    float startY = yAt;
+
     //NOTE: cursor position default
     float2 cursorPosition = make_float2(xAt, yAt);
 
     while(*at) {
 
         u32 rune = easyUnicode_utf8_codepoint_To_Utf32_codepoint(&((char *)at), true);
-
-        
 
         float factor = 1.0f;
 
@@ -330,6 +336,31 @@ static float2 draw_text(Renderer *renderer, Font *font, char *str, float startX,
     if((at - str) == cursor_in_bytes) {
         cursorPosition = make_float2(xAt, yAt);
     }
+    result.cursorP = cursorPosition;
+    result.size = make_float2(xAt - startX, (yAt - startY) + font->fontHeight*fontScale);
 
-    return cursorPosition;
+    return result;
+}
+
+static float font_getStringDimensions(Renderer *renderer, Font *font, char *str) {
+    float xAt = 0;
+
+    char *at = str;
+    while(*at) {
+
+        u32 rune = easyUnicode_utf8_codepoint_To_Utf32_codepoint(&((char *)at), true);
+
+        GlyphInfo g = easyFont_getGlyph(font, rune);
+
+        assert(g.unicodePoint == rune);
+
+        if(rune == ' ') {
+            g.width = easyFont_getGlyph(font, 'y').width;
+        }
+
+        xAt += (g.width + g.xoffset);
+
+    }
+
+    return (xAt); 
 }

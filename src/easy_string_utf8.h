@@ -243,6 +243,49 @@ unsigned int easyUnicode_utf8_codepoint_To_Utf32_codepoint(char **streamPtr, int
 	return result;
 }
 
+int size_of_last_utf8_codepoint_in_bytes(char *string, int byte_of_cursor) {
+	int total_size_in_bytes = 0;
+
+	bool found = false;
+
+	while(byte_of_cursor > 0 && !found) {
+		u8 byteAt = string[byte_of_cursor - 1];
+
+		if(easyUnicode_isLeadingByte(byteAt) || easyUnicode_isSingleByte(byteAt)) {
+			total_size_in_bytes++;
+			found = true;
+			break;
+		} else if(easyUnicode_isContinuationByte(byteAt)) {
+			byte_of_cursor--; //NOTE: Move back a byte
+			total_size_in_bytes++;
+
+			if(total_size_in_bytes > 3) {
+				//NOTE: Should only ever be 3 continuation bytes in a row. 
+				//NOTE: Could be binary file? 
+				found = true;
+				break;
+			}
+		} else {
+			//NOTE: Isn't valid utf8 - could be binary file? 
+			total_size_in_bytes = 1;
+			found = true;
+			break;
+		}
+	}
+
+	return total_size_in_bytes;
+}
+
+int size_of_next_utf8_codepoint_in_bytes(char *string) {
+	int total_size_in_bytes = 0;
+
+	if(string[0]) {
+		total_size_in_bytes = easyUnicode_unicodeLength(string[0]);
+	}
+
+	return total_size_in_bytes;
+}
+
 
 int easyString_getSizeInBytes_utf8(char *string) {
     unsigned int result = 0;
@@ -366,19 +409,148 @@ struct String_Query_Search_Results {
 	size_t byteOffsets[512];//NOTE Dynamic Array of byte offsets
 	int byteOffsetCount; 
 	int byteOffsetTotalCount;
+	float sub_string_width; //NOTE: Without font scale
 };
 
+struct StringShiftTable {
+	u32 runes[64];
+	u32 shifts[64];	
+	u32 shiftCount_inRunes;
+};
 
-static String_Query_Search_Results string_utf8_find_sub_string(char *text, char *sub_string) {
-	//NOTE: boyer moore algorithm
+static StringShiftTable string_utf8_build_shift_table(char *pattern_utf8) {
+	StringShiftTable table = {};
+
+	char *at = pattern_utf8;
+
+	//NOTE: Get number of runes
+	table.shiftCount_inRunes = easyString_getStringLength_utf8(pattern_utf8);
+
+	int count = 0;
+
+	while(*at) {
+		assert(count < table.shiftCount_inRunes);
+		u32 runeAt = easyUnicode_utf8_codepoint_To_Utf32_codepoint(&at, true);
+
+		table.shifts[count] = max(1, table.shiftCount_inRunes - count);
+		table.runes[count] = runeAt;
+
+		count++;
+	}
+
+		
+	return table;
+	
+}
+
+//NOTE: This assumes that string_at_end is equal to or longer than sub_string, well write into memroy if we're not
+//		So I mark it as _ to make it 'hidden'
+static bool string_utf8_matchStringBackwards_(char *string_at_end, char *sub_string, int sub_string_in_bytes) {
+	bool result = false;
+	if(sub_string_in_bytes > 0) {
+		
+
+		char *sub_end = sub_string + sub_string_in_bytes; 
+
+		int byteAt = sub_string_in_bytes - 1;
+
+		result = true;
+
+		//NOTE: Move back off the end of the string
+		string_at_end--;
+		sub_end--;
+
+		while(byteAt >= 0 && result) {
+			result &= (*sub_end == *string_at_end);
+			string_at_end--;
+			sub_end--;
+			byteAt--;	
+		}
+	}
+	
+	return result;
+}
+
+static int get_shift_from_table(StringShiftTable *table, u32 rune) {
+
+	int result = 1;
+	for(int i = 0; i < table->shiftCount_inRunes; ++i) {
+		if(table->runes[i] == rune) {
+			result = table->shifts[i];
+			break;
+		}
+	}
+	//NOTE: Default to 1 if couldn't find it
+
+	return result;
+}
+
+//NOTE: Optimized by assuming sub_string will be smaller then text most of the time. 
+static bool string_utf8_string_bigger_than_substring(char *text, char *sub_string) {
+	bool result = true;
+	while(*sub_string) {
+		if(*text) {
+
+		} else {
+			//NOTE: text is smaller
+			result = false;
+			break;
+		}
+		text++;
+		sub_string++;
+	}
+
+	return result;
+}
+
+//NOTE: boyer moore algorithm
+static String_Query_Search_Results string_utf8_find_sub_string(char *text, char *sub_string_utf8) {
 	String_Query_Search_Results result = {};
+	if(string_utf8_string_bigger_than_substring(text, sub_string_utf8)) {
+		
+		StringShiftTable shift_table = string_utf8_build_shift_table(sub_string_utf8);
 
-	// if(byteOffsetCount >= byteOffsetTotalCount) {
-	// 	byteOffsetTotalCount += 32;
-	// 	state->history =(int *)easyPlatform_reallocMemory(result->history, state->block_count*sizeof(int), state->total_block_count*sizeof(int));
-	// }
+		char *at = text;
 
+		int runeAt = shift_table.shiftCount_inRunes - 1;  
 
+		int size_of_sub_string_in_bytes = easyString_getSizeInBytes_utf8(sub_string_utf8);
+
+		//NOTE: Get the starting byteAt
+		at += size_of_sub_string_in_bytes;
+
+		bool looping = true;
+		bool endNextLoop = false;
+		while(looping) {
+
+			if(string_utf8_matchStringBackwards_(at, sub_string_utf8, size_of_sub_string_in_bytes)) {
+				//NOTE: Push into table as a found
+				assert(512 > result.byteOffsetCount);
+				int byte_at = (at - text);
+				assert(byte_at >= 0);
+				result.byteOffsets[result.byteOffsetCount++] = byte_at - size_of_sub_string_in_bytes; //NOTE: Move backwards to the start
+			}
+			
+			u32 runeAt = easyUnicode_utf8_codepoint_To_Utf32_codepoint(&at, false);
+
+			int bytesToAdvance = get_shift_from_table(&shift_table, runeAt);
+
+			at += bytesToAdvance;
+
+			if(endNextLoop) {
+				looping = false;
+			}
+
+			if(!at[0]) {
+				endNextLoop = true;;
+			}
+
+		}
+	}
+
+	
+
+	return result;
 }
 
 #endif // END OF IMPLEMENTATION

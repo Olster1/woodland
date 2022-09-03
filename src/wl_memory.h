@@ -45,6 +45,14 @@ static inline u8 * easyPlatform_reallocMemory(void *from, u32 oldSize, u32 newSi
     return result;
 }
 
+static inline char *easyPlatform_allocateStringOnHeap_nullTerminated(char *string) {
+    int stringSize = easyString_getSizeInBytes_utf8(string);
+    char *result = (char *)easyPlatform_allocateMemory(stringSize + 1, EASY_PLATFORM_MEMORY_ZERO);
+    easyPlatform_copyMemory(result, string, stringSize);
+
+    return result;
+}
+
 #define EASY_PLATFORM_H 1
 #endif
 

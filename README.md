@@ -32,12 +32,12 @@ It's really just for me as a fun project, something to practice using Direct3d a
 - [x] Up and down arrows to move line by line
 - [x] End of line key & home key to jump to end of line and start respectively
 - [x] Open buffer that has been loaded (ctrl - b -> open a dropdown of all open buffers)
-- [ ] Add search filter for open buffers
+- [x] Add search filter for open buffers
+- [x] Robust Undo/Redo 
+- [x] Ctrl-Find in an open buffer (not fuzzy search)
 - [ ] Shift highlighting of multiple lines to cut, copy & delete text - both with Shift-Arrows and Mouse Click-Drag
-- [ ] Robust Undo/Redo 
 
 
-- [ ] Ctrl-Find in an open buffer (not fuzzy search)
 - [ ] Ctrl-Find in a whole project (not fuzzy search)
 - [ ] Recomend code based on what's in the buffer already (drop down of choices (is fuzzy) that you can choose with arrow keys, like sublime text)
 - [ ] Ctrl-G jump to line in buffer
