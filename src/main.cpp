@@ -670,6 +670,8 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 			//NOTE: Update the save position in the redo buffer so we know when we're back to a save position
 			open_buffer->current_save_undo_redo_id = open_buffer->buffer.undo_redo_state.idAt;
 		}
+
+		prettify_buffer(b);
 	}
 
 

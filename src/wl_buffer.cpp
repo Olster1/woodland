@@ -75,7 +75,6 @@ static void makeGapBuffer_(WL_Buffer *b, int byteStart, int gapSize) {
 	for(int i = (b->bufferSize_inUse_inBytes - 1); i >= byteStart; i--) {
 		b->bufferMemory[i + gapSize] = b->bufferMemory[i];
 	}
-	assert(byteStart < 10000);
 	b->gapBuffer_startAt = byteStart;
 	b->gapBuffer_endAt = b->gapBuffer_startAt + gapSize; 
 
@@ -289,24 +288,65 @@ static size_t convert_compiled_byte_point_to_buffer_byte_point(WL_Buffer *b, siz
 	return result;
 }
 
-// static size_t getRuneCountForNewLineToCursor(WL_Buffer *b) {
+static void prettify_buffer(WL_Buffer *b) {
+	endGapBuffer(b);
 
-// 	//NOTE: Have to make sure the buffer isn't overrun
-// 	int bytes_till_start = b->cursorAt_inBytes; 
+	WL_Buffer copy_buffer = *b;
+	copy_buffer.bufferSize_inUse_inBytes = 0;
+	copy_buffer.bufferSize_inBytes = 0;
+	copy_buffer.bufferMemory = 0;
 
-// 	size_t result = -1;
-// 	bool found = false;
+	//NOTE: Start the file with a new line
+	bool hitNewLine = true;
 
-// 	while(bytes_till_start != 0 && !found) {
+	int byteAt = 0;
 
-// 		if(b->bufferMemory[bytes_till_start] == '\n') { //NOTE: looking for new line
-// 			result = bytes_till_start;
-// 			found = true;
-// 			break;
-// 		}
+	int depthAt = 0;
+	for(int i = 0; i < b->bufferSize_inUse_inBytes; ++i) {
+		{
+			u8 byte = b->bufferMemory[i];
 
-// 		bytes_till_start--;
-// 	}
+			if(hitNewLine && byte == ' ' || byte == '\t') {
+				//NOTE: We eat tabs and spaces
 
-// 	return result; 
-// }
+			} else {
+				if(byte == '{') {
+					depthAt++;
+				} else if(byte == '}') {
+					depthAt--;
+					if(depthAt < 0) { depthAt = 0; }
+				}
+				
+				
+				
+				if(hitNewLine) {
+					for(int i = 0; i < depthAt; i++) {
+						//NOTE: Add in the tabs
+						char *str = "\t";
+						addTextToBuffer(&copy_buffer, str, byteAt++, false);
+					}
+				}
+
+				//NOTE: Add in text 
+				char temp[] = {(char)byte};
+				addTextToBuffer(&copy_buffer, temp, byteAt++, false);
+
+				hitNewLine = false;
+
+				if(byte == '\n' || byte == '\r') {
+					//NOTE: We're at a new line so we have to indent, but only if we hit some new text
+					hitNewLine = true;
+				} 
+			}
+		}
+	}
+
+	platform_free_memory(b->bufferMemory);
+	copy_buffer.cursorAt_inBytes = b->cursorAt_inBytes;
+	if(copy_buffer.cursorAt_inBytes >= copy_buffer.bufferSize_inUse_inBytes) {
+		copy_buffer.cursorAt_inBytes = max(0, copy_buffer.bufferSize_inUse_inBytes - 1);
+	}
+
+	*b = copy_buffer;
+	
+}

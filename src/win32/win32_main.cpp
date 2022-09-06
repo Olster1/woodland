@@ -339,6 +339,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
             addToCommandBuffer = keyIsDown;
         } else if(vk_code == 'Z') {
             keyType = PLATFORM_KEY_Z;
+            //ADD to buffer for redo undo to follow the windows wait feel
+            addToCommandBuffer = keyIsDown;
         } else if(vk_code == VK_OEM_2) {
             keyType = PLATFORM_KEY_FULL_FORWARD_SLASH;
         } else if(vk_code == VK_OEM_PERIOD) {
@@ -363,6 +365,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
             keyType = PLATFORM_KEY_S;
         } else if(vk_code == 'Y') {
             keyType = PLATFORM_KEY_Y;
+            //ADD to buffer for redo undo to follow the windows wait feel
+            addToCommandBuffer = keyIsDown;
         } else if(vk_code == 'B') {
             keyType = PLATFORM_KEY_B;
         } else if(vk_code == 'F') {

@@ -91,6 +91,7 @@ static Hightlight_Rect *highlight_get_rectangle(Highlight_Array *array, int inde
 //NOTE: This function either adds one or unions is to an exisiting line
 static void highlight_push_rectangle(Highlight_Array *array, Rect2f rect_dim, int lineNumber) {
 	Hightlight_Rect *rect = 0; 
+
 	if(array->number_of_rects > 0) {
 
 		for(int i = 0; i < array->number_of_rects && !rect; ++i) {

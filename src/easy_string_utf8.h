@@ -177,67 +177,72 @@ int easyUnicode_unicodeLength(unsigned char byte) {
 unsigned int easyUnicode_utf8_codepoint_To_Utf32_codepoint(char **streamPtr, int advancePtr) {
 	unsigned char *stream = (unsigned char *)(*streamPtr);
 	unsigned int result = 0;
-	unsigned int sixBitsFull = (1 << 5 | 1 << 4 | 1 << 3 | 1 << 2 | 1 << 1 | 1 << 0);
-	unsigned int fiveBitsFull = (1 << 4 | 1 << 3 | 1 << 2 | 1 << 1 | 1 << 0);
-	unsigned int fourBitsFull = (1 << 3 | 1 << 2 | 1 << 1 | 1 << 0);
+	if(stream[0]) {
+		
+		unsigned int sixBitsFull = (1 << 5 | 1 << 4 | 1 << 3 | 1 << 2 | 1 << 1 | 1 << 0);
+		unsigned int fiveBitsFull = (1 << 4 | 1 << 3 | 1 << 2 | 1 << 1 | 1 << 0);
+		unsigned int fourBitsFull = (1 << 3 | 1 << 2 | 1 << 1 | 1 << 0);
 
-	int unicodeLen = 1;
-	if(easyUnicode_isContinuationByte(stream[0])) { 
-		result =  '?';
-	} else {
-		unicodeLen = easyUnicode_unicodeLength(stream[0]);
-	} 
-	
-	if(unicodeLen > 1) {
-		EASY_HEADERS_ASSERT(easyUnicode_isLeadingByte(stream[0]));
-		//needs to be decoded
-		switch(unicodeLen) {
-			case 2: {
-				// printf("%s\n", "two byte unicode");
-				unsigned int firstByte = stream[0];
-				unsigned int secondByte = stream[1];
-				EASY_HEADERS_ASSERT(easyUnicode_isContinuationByte(secondByte));
-				result |= (secondByte & sixBitsFull);
-				result |= ((firstByte & sixBitsFull) << 6);
+		int unicodeLen = 1;
+		if(easyUnicode_isContinuationByte(stream[0])) { 
+			result =  '?';
+		} else {
+			unicodeLen = easyUnicode_unicodeLength(stream[0]);
+		} 
+		
+		if(unicodeLen > 1) {
+			EASY_HEADERS_ASSERT(easyUnicode_isLeadingByte(stream[0]));
+			//needs to be decoded
+			switch(unicodeLen) {
+				case 2: {
+					// printf("%s\n", "two byte unicode");
+					unsigned int firstByte = stream[0];
+					unsigned int secondByte = stream[1];
+					EASY_HEADERS_ASSERT(easyUnicode_isContinuationByte(secondByte));
+					result |= (secondByte & sixBitsFull);
+					result |= ((firstByte & sixBitsFull) << 6);
 
-				if(advancePtr) (*streamPtr) += 2;
-			} break;
-			case 3: {
-				// printf("%s\n", "three byte unicode");
-				unsigned int firstByte = stream[0];
-				unsigned int secondByte = stream[1];
-				unsigned int thirdByte = stream[2];
-				EASY_HEADERS_ASSERT(easyUnicode_isContinuationByte(secondByte));
-				EASY_HEADERS_ASSERT(easyUnicode_isContinuationByte(thirdByte));
-				result |= (thirdByte & sixBitsFull);
-				result |= ((secondByte & sixBitsFull) << 6);
-				result |= ((firstByte & fiveBitsFull) << 12);
+					if(advancePtr) (*streamPtr) += 2;
+				} break;
+				case 3: {
+					// printf("%s\n", "three byte unicode");
+					unsigned int firstByte = stream[0];
+					unsigned int secondByte = stream[1];
+					unsigned int thirdByte = stream[2];
+					EASY_HEADERS_ASSERT(easyUnicode_isContinuationByte(secondByte));
+					EASY_HEADERS_ASSERT(easyUnicode_isContinuationByte(thirdByte));
+					result |= (thirdByte & sixBitsFull);
+					result |= ((secondByte & sixBitsFull) << 6);
+					result |= ((firstByte & fiveBitsFull) << 12);
 
-				if(advancePtr) (*streamPtr) += 3;
-			} break;
-			case 4: {
-				// printf("%s\n", "four byte unicode");
-				unsigned int firstByte = stream[0];
-				unsigned int secondByte = stream[1];
-				unsigned int thirdByte = stream[2];
-				unsigned int fourthByte = stream[3];
-				EASY_HEADERS_ASSERT(easyUnicode_isContinuationByte(secondByte));
-				EASY_HEADERS_ASSERT(easyUnicode_isContinuationByte(thirdByte));
-				EASY_HEADERS_ASSERT(easyUnicode_isContinuationByte(fourthByte));
-				result |= (thirdByte & sixBitsFull);
-				result |= ((secondByte & sixBitsFull) << 6);
-				result |= ((firstByte & sixBitsFull) << 12);
-				result |= ((firstByte & fourBitsFull) << 18);
+					if(advancePtr) (*streamPtr) += 3;
+				} break;
+				case 4: {
+					// printf("%s\n", "four byte unicode");
+					unsigned int firstByte = stream[0];
+					unsigned int secondByte = stream[1];
+					unsigned int thirdByte = stream[2];
+					unsigned int fourthByte = stream[3];
+					EASY_HEADERS_ASSERT(easyUnicode_isContinuationByte(secondByte));
+					EASY_HEADERS_ASSERT(easyUnicode_isContinuationByte(thirdByte));
+					EASY_HEADERS_ASSERT(easyUnicode_isContinuationByte(fourthByte));
+					result |= (thirdByte & sixBitsFull);
+					result |= ((secondByte & sixBitsFull) << 6);
+					result |= ((firstByte & sixBitsFull) << 12);
+					result |= ((firstByte & fourBitsFull) << 18);
 
-				if(advancePtr) (*streamPtr) += 4;
-			} break;
-			default: {
-				EASY_HEADERS_ASSERT(!"invalid path");
+					if(advancePtr) (*streamPtr) += 4;
+				} break;
+				default: {
+					EASY_HEADERS_ASSERT(!"invalid path");
+				}
 			}
+		} else {
+			result = stream[0];
+			if(advancePtr) { (*streamPtr) += 1; }
 		}
 	} else {
-		result = stream[0];
-		if(advancePtr) { (*streamPtr) += 1; }
+
 	}
 
 	return result;
@@ -535,7 +540,25 @@ static String_Query_Search_Results string_utf8_find_sub_string(char *text, char 
 
 			int bytesToAdvance = get_shift_from_table(&shift_table, runeAt);
 
+			char *temp = at + 1;
+
+			//NOTE: This will move past the null terminator, so we need to check if we moved past it in this move
 			at += bytesToAdvance;
+
+			//NOTE: Check if we went past the null terminator
+			//TODO: this could be slow? If we had the length of the full string we could use that instead. 
+			while(temp < at) {
+				if(!temp[0]) {
+					//NOTE: Hit a null terminator 
+					at = temp;
+					break;
+				} 
+				temp++;
+			}
+
+			
+			
+
 
 			if(endNextLoop) {
 				looping = false;

@@ -53,8 +53,11 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 	// OutputDebugStringA((LPCSTR)"\n");
 
 	float buffer_title_height = font.fontHeight*fontScale;
-	
-	float startX = window_bounds.minX - open_buffer->scroll_pos.x;
+
+	float default_hight_light_height = 1.3f*buffer_title_height;
+
+	float leftMargin = 0.8f*font.fontHeight*fontScale;
+	float startX = window_bounds.minX - open_buffer->scroll_pos.x + leftMargin; 
 	float startY = -1.0f*font.fontHeight*fontScale - buffer_title_height - window_bounds.minY + open_buffer->scroll_pos.y;
 
 	float xAt = startX;
@@ -66,8 +69,6 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 	float cursorY = startY;
 
 	float newLineIncrement = font.fontHeight*fontScale*editorState->line_spacing;
-
-	bool newLine = true;
 
 	bool parsing = true;
 	EasyTokenizer tokenizer = lexBeginParsing((char *)buffer_to_draw.memory, EASY_LEX_OPTION_NONE);
@@ -103,7 +104,9 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 	
 
 	size_t closest_click_buffer_point = 0;
-	float closest_click_distance = FLT_MAX;
+
+	//NOTE: We do a float2 because we want to test closest y-line first then x so when we click on a line we go to the end of the line even if there aren't any glyphs there 
+	float2 closest_click_distance = make_float2(FLT_MAX, FLT_MAX);
 
 	bool tried_clicking = editorState->mode_ == MODE_EDIT_BUFFER && !has_active_interaction(&editorState->ui_state) && global_platformInput.keyStates[PLATFORM_MOUSE_LEFT_BUTTON].pressedCount > 0;
 
@@ -151,7 +154,7 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 
 	  //       OutputDebugStringA((char *)string);
 
-
+			//NOTE: For scaling tabs glyphs
 			float factor = 1.0f;
 
 			if(yAt < 0 && yAt >= -(window_bounds.maxY + font.fontHeight)) {
@@ -159,31 +162,24 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 
 
 				if(tried_clicking) {
-					float2 distance = make_float2(xAt - mouse_point_top_left_origin.x, yAt + mouse_point_top_left_origin.y); 
-					float distance_sqr = distance.x*distance.x + distance.y*distance.y;
-
-					if(distance_sqr <= closest_click_distance) {
-						closest_click_distance = distance_sqr;
-						closest_click_buffer_point = memory_offset;
-					}
+					float2 distance = make_float2(xAt - mouse_point_top_left_origin.x, get_abs_value(yAt) - mouse_point_top_left_origin.y); 
+					distance.x = get_abs_value(distance.x);
+					distance.y = get_abs_value(distance.y);
+					//NOTE: We test the y distance first since we want to give preference to lines
+					if(distance.y <= closest_click_distance.y) {
+						bool differentLine = distance.y < closest_click_distance.y;
+						if(distance.x <= closest_click_distance.x || differentLine) {
+							closest_click_distance = distance;
+							closest_click_buffer_point = memory_offset;
+						}
+					} 
 				}
 
 			} else {
 				drawing = false;
 			}
 
-			{
-				if(search_query) {
-					//NOTE: Draw the highlighted search results
-					if(searchBufferAt < search_query->byteOffsetCount && memory_offset == search_query->byteOffsets[searchBufferAt]) {
-						//NOTE: Push the outline of the box, we don't draw it since we want to batch the draw calls together
-						rectsToDraw_forSearch[searchBufferAt] = make_float2(xAt, yAt);
-						searchBufferAt++;
-						
-					}
-				}
-				
-			}
+			
 
 			//NOTE: Draw selectable overlay
 			{
@@ -208,7 +204,6 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 			if(rune == '\n' || rune == '\r') {
 				yAt -= newLineIncrement;
 				xAt = startX;
-				newLine = true;
 
 				//NOTE: Newline token so we have to check the cursor again and skip the extra newline
 				if(isNewlineTokenWindowsType(token)) {
@@ -232,11 +227,13 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 				
 			} else if(drawing) {
 
+				bool wasTabRune = false;
 				if(rune == '\t') {
 					rune = (u32)' ';
 					factor = 4.0f;
+					wasTabRune = true;
 				} 
-				
+
 				GlyphInfo g = easyFont_getGlyph(&font, rune);	
 
 				assert(g.unicodePoint == rune);
@@ -249,17 +246,8 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 				// sprintf(buffer, "%d\n", g.unicodePoint);
 				// OutputDebugStringA(buffer);
 
-				
-
-				if(g.hasTexture) {
-
-
-					float4 color = font_color;//make_float4(0, 0, 0, 1);
+				{
 					float2 scale = make_float2(g.width*fontScale, g.height*fontScale);
-
-					if(newLine) {
-						xAt = 0.6f*scale.x + startX;
-					}
 
 					float offsetY = -0.5f*scale.y;
 
@@ -267,15 +255,46 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 					pos.x = xAt + fontScale*g.xoffset;
 					pos.y = yAt + -fontScale*g.yoffset + offsetY;
 					pos.z = 1.0f;
-					pushGlyph(renderer, g.handle, pos, scale, text_color, g.uvCoords);
 
+					//NOTE: If highlighting the text
 					if(in_select) {
 						float2 selectScale = scale;
+						selectScale.y = default_hight_light_height;
 
-						// if(selectScale.y < font.fontHeight) { selectScale.y = font.fontHeight; } 
-						highlight_push_rectangle(highlight_array, make_rect2f_center_dim(pos.xy, selectScale), yAt);
+						float2 highlight_pos = pos.xy;
+						highlight_pos.y = yAt;
+
+						if(wasTabRune) {
+							//NOTE: Was a tab rune so we want to move our position to center more
+							selectScale.x = (g.width + g.xoffset)*fontScale*factor;
+							
+							//NOTE: Move over a bit to get in the center
+							highlight_pos.x += 0.3f*selectScale.x;
+						}
+
+						//NOTE: This unions the rectangles together
+						highlight_push_rectangle(highlight_array, make_rect2f_center_dim(highlight_pos, selectScale), yAt);
 					}
 
+					if(g.hasTexture) {
+
+						float4 color = font_color;//make_float4(0, 0, 0, 1);
+						
+						pushGlyph(renderer, g.handle, pos, scale, text_color, g.uvCoords);
+					}
+				}
+
+				{
+					if(search_query) {
+						//NOTE: Draw the highlighted search results
+						if(searchBufferAt < search_query->byteOffsetCount && memory_offset == search_query->byteOffsets[searchBufferAt]) {
+							//NOTE: Push the outline of the box, we don't draw it since we want to batch the draw calls together
+							rectsToDraw_forSearch[searchBufferAt] = make_float2(xAt + fontScale*g.xoffset, yAt);
+							searchBufferAt++;
+							
+						}
+					}
+				
 				}
 
 				
@@ -284,8 +303,6 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 				if((xAt) > max_x) {
 					max_x = xAt;
 				}
-
-				newLine = false;
 
 			}
 		}
@@ -301,7 +318,7 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 	if(is_active) {
 
 		if(tried_clicking) {
-			if(closest_click_distance != FLT_MAX) {
+			if(closest_click_distance.x != FLT_MAX) { //NOTE: See if this is a valid position 
 				b->cursorAt_inBytes = convert_compiled_byte_point_to_buffer_byte_point(b, closest_click_buffer_point);
 
 				end_select(&open_buffer->selectable_state);
@@ -355,7 +372,7 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 
 				float draw_y = p.y + 0.25f*font.fontHeight*fontScale;
 
-				float4 color = editorState->color_palette.standard;
+				float4 color = editorState->color_palette.function;
 
 				color.w = 0.3f;
 				pushTexture(renderer, global_white_texture, make_float3(p.x, draw_y, 1.0f), s, color, make_float4(0, 0, 1, 1));
