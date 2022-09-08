@@ -272,7 +272,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
                 global_platformInput.low_surrogate = 0;
             }
         }
-
+    } else if(msg == WM_LBUTTONDBLCLK) {
+        global_platformInput.doubleClicked = true;
     } else if(msg == WM_LBUTTONDOWN) {
         if(!global_platformInput.keyStates[PLATFORM_MOUSE_LEFT_BUTTON].isDown) {
             global_platformInput.keyStates[PLATFORM_MOUSE_LEFT_BUTTON].pressedCount++;
@@ -907,7 +908,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int
     	//First register the type of window we are going to create
         WNDCLASSEXW winClass = {};
         winClass.cbSize = sizeof(WNDCLASSEXW);
-        winClass.style = CS_HREDRAW | CS_VREDRAW;
+        winClass.style = CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS; //NOTE: CS_DBLCLKS for double click messages
         winClass.lpfnWndProc = &WndProc;
         winClass.hInstance = hInstance;
         winClass.hIcon = LoadIconW(0, IDI_APPLICATION);
@@ -1031,6 +1032,9 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int
         //NOTE: Clear the input text buffer to empty
         global_platformInput.textInput_bytesUsed = 0;
         global_platformInput.textInput_utf8[0] = '\0';
+
+        //NOTE: Clear double clicked state 
+        global_platformInput.doubleClicked = false;
 
         //NOTE: Clear our input command buffer
         global_platformInput.keyInputCommand_count = 0;

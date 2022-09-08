@@ -11,12 +11,15 @@ static void  refresh_buffer(Single_Search *search) {
 static char *draw_single_search(Single_Search *search, Renderer *renderer, Font *font, float fontScale, float4 color, float xAt, float yAt, float4 cursorColor, char *extraWord) {
     Compiled_Buffer_For_Drawing buffer_to_draw = compileBuffer_toDraw(&search->buffer, &globalPerFrameArena, &search->selectable_state);
 
-    char *fullString = easy_createString_printf(&globalPerFrameArena, "%s%s", extraWord, (char *)buffer_to_draw.memory);
-
-    
-
     pushShader(renderer, &sdfFontShader);
-    float2 cursor_pos = draw_text(renderer, font, fullString, xAt, yAt, fontScale, color, buffer_to_draw.cursor_at).cursorP;
+    
+    //NOTE: If want an extra word in front of the search bar
+    if(extraWord) {
+        xAt += draw_text(renderer, font, extraWord, xAt, yAt, fontScale, color, 0).size.x;
+    }
+
+    char *str = (char *)buffer_to_draw.memory;
+    float2 cursor_pos = draw_text(renderer, font, str, xAt, yAt, fontScale, color, buffer_to_draw.cursor_at).cursorP;
 
     //NOTE: Draw the cursor now
     pushShader(renderer, &textureShader);

@@ -268,7 +268,7 @@ static size_t convert_compiled_byte_point_to_buffer_byte_point(WL_Buffer *b, siz
 	bool found = false;
 
 	size_t byte_at = 0;
-	for(int i = 0; i < b->bufferSize_inUse_inBytes && !found; i++) {
+	for(int i = 0; i <= b->bufferSize_inUse_inBytes && !found; i++) {
 
 		if(byte_at == cursor_byte_in_compiled) {
 			result = i;

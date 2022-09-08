@@ -417,6 +417,17 @@ struct String_Query_Search_Results {
 	float sub_string_width; //NOTE: Without font scale
 };
 
+static bool isInSearchArray(size_t byteOffset, String_Query_Search_Results *query) {
+	bool found = false;
+	for(int i = 0; i < query->byteOffsetCount; ++i) {
+		if(query->byteOffsets[i] == byteOffset) {
+			found = true;
+			break;
+		}
+	}
+	return found;
+}
+
 struct StringShiftTable {
 	u32 runes[64];
 	u32 shifts[64];	

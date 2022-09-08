@@ -1,3 +1,51 @@
+struct DoubleClickWordResult {
+	bool isInWord;
+	size_t shift_start;
+	size_t shift_end;
+};
+
+static bool isValidDoubleClickCharacter(char a) {
+	if(lexIsAlphaNumeric(a) || lexIsNumeric(a) || lexInnerAlphaNumericCharacter(a) || (int)a > 127) { //NOTE: > 255 for unicode characters 
+		return true;
+	} else {
+		return false;
+	}
+} 
+
+static DoubleClickWordResult isDoubleClickInWord(size_t memory_offset, char *text) {
+	DoubleClickWordResult result = {};
+
+	char *str = text + memory_offset;
+
+	if(isValidDoubleClickCharacter(str[0])) {
+		result.isInWord = true;
+
+		char *forward = str;
+		//NOTE: Walk forward
+		while(*forward && isValidDoubleClickCharacter(forward[0])) {	
+			forward++;
+		}
+
+		char *back = str;
+		//NOTE: Walk back
+		while(isValidDoubleClickCharacter(back[0]) && back > text) {	
+			back--;
+		}
+
+		//NOTE: Know this stopped because we weren't at the end of the buffer, so actually move forward one byte so we didn't over step the edge
+		if(back > text) {
+			back++;
+		}
+
+		result.shift_end = forward - text;
+		result.shift_start = back - text;
+	} else {
+		//NOTE: Could just select this one? 
+	} 
+	
+	return result;
+}
+
 static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *renderer, bool is_active, float windowWidth, float windowHeight, Font font, float4 font_color, float fontScale, int window_index, float2 mouse_point_top_left_origin) {
 	WL_Open_Buffer *open_buffer = &editorState->buffers_loaded[w->buffer_index];
 
@@ -108,7 +156,8 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 	//NOTE: We do a float2 because we want to test closest y-line first then x so when we click on a line we go to the end of the line even if there aren't any glyphs there 
 	float2 closest_click_distance = make_float2(FLT_MAX, FLT_MAX);
 
-	bool tried_clicking = editorState->mode_ == MODE_EDIT_BUFFER && !has_active_interaction(&editorState->ui_state) && global_platformInput.keyStates[PLATFORM_MOUSE_LEFT_BUTTON].pressedCount > 0;
+	bool tried_clicking = editorState->mode_ == MODE_EDIT_BUFFER && !has_active_interaction(&editorState->ui_state) && (global_platformInput.keyStates[PLATFORM_MOUSE_LEFT_BUTTON].pressedCount > 0 || global_platformInput.doubleClicked);
+	bool mouseIsDown = open_buffer->selectable_state.is_active && editorState->mode_ == MODE_EDIT_BUFFER && !has_active_interaction(&editorState->ui_state) && (global_platformInput.keyStates[PLATFORM_MOUSE_LEFT_BUTTON].isDown && global_platformInput.keyStates[PLATFORM_MOUSE_LEFT_BUTTON].pressedCount == 0);
 
 	while(parsing) {
 		bool renderToken = true;
@@ -161,7 +210,7 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 				drawing = true;
 
 
-				if(tried_clicking) {
+				if(tried_clicking || mouseIsDown) {
 					float2 distance = make_float2(xAt - mouse_point_top_left_origin.x, get_abs_value(yAt) - mouse_point_top_left_origin.y); 
 					distance.x = get_abs_value(distance.x);
 					distance.y = get_abs_value(distance.y);
@@ -221,6 +270,7 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 					at++;
 				}
 
+				//NOTE: Gone below the window view
 				if(yAt < -window_bounds.maxY) {
 					drawing = false;
 				}
@@ -287,7 +337,7 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 				{
 					if(search_query) {
 						//NOTE: Draw the highlighted search results
-						if(searchBufferAt < search_query->byteOffsetCount && memory_offset == search_query->byteOffsets[searchBufferAt]) {
+						if(searchBufferAt < search_query->byteOffsetCount && isInSearchArray(memory_offset, search_query)) {
 							//NOTE: Push the outline of the box, we don't draw it since we want to batch the draw calls together
 							rectsToDraw_forSearch[searchBufferAt] = make_float2(xAt + fontScale*g.xoffset, yAt);
 							searchBufferAt++;
@@ -323,8 +373,36 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 
 				end_select(&open_buffer->selectable_state);
 
-				update_select(&open_buffer->selectable_state, b->cursorAt_inBytes);
+				//NOTE: User double clicked on a glyph, so see if clicked a word
+				if(global_platformInput.doubleClicked) {
+					DoubleClickWordResult doubleClickResult = isDoubleClickInWord(closest_click_buffer_point, (char *)buffer_to_draw.memory);
+					if(doubleClickResult.isInWord) {
+
+						size_t shiftEnd = convert_compiled_byte_point_to_buffer_byte_point(b, doubleClickResult.shift_end);
+						size_t shiftStart = convert_compiled_byte_point_to_buffer_byte_point(b, doubleClickResult.shift_start);
+
+						//NOTE: Update the highlight with the new bytes. Update select will set the start and end based on if this is a new active select
+						update_select(&open_buffer->selectable_state, shiftStart);
+						update_select(&open_buffer->selectable_state, shiftEnd);
+
+						b->cursorAt_inBytes = shiftEnd;
+					}
+				} else {
+					//NOTE: Just reset the highlight text when we try clicking and prepare the select if the user is 
+					//		going to drag and highlight 
+					update_select(&open_buffer->selectable_state, b->cursorAt_inBytes);
+				}
 			}
+		}
+
+		if(mouseIsDown && open_buffer->selectable_state.is_active) {
+			b->cursorAt_inBytes = convert_compiled_byte_point_to_buffer_byte_point(b, closest_click_buffer_point);
+
+			//NOTE: We are dragging 
+			update_select(&open_buffer->selectable_state, b->cursorAt_inBytes);
+
+			//NOTE: Check if we should the page up or down
+			
 		}
 		
 

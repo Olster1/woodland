@@ -293,6 +293,7 @@ static DrawTextDetails draw_text(Renderer *renderer, Font *font, char *str, floa
 
     while(*at) {
 
+        char *temp = at;
         u32 rune = easyUnicode_utf8_codepoint_To_Utf32_codepoint(&((char *)at), true);
 
         float factor = 1.0f;
@@ -324,6 +325,11 @@ static DrawTextDetails draw_text(Renderer *renderer, Font *font, char *str, floa
             pushGlyph(renderer, g.handle, pos, scale, font_color, g.uvCoords);
         }
 
+        // if(temp == str) {
+        //     //NOTE: Offset the start string to accound for the offset
+        //     cursorPosition.x += g.xoffset*fontScale;
+        // }
+
         xAt += (g.width + g.xoffset)*fontScale*factor;
 
         newLine = false;
@@ -342,7 +348,7 @@ static DrawTextDetails draw_text(Renderer *renderer, Font *font, char *str, floa
     return result;
 }
 
-static float font_getStringDimensions(Renderer *renderer, Font *font, char *str) {
+static float font_getStringDimensions(Renderer *renderer, Font *font, char *str, float fontScale) {
     float xAt = 0;
 
     char *at = str;
@@ -362,5 +368,5 @@ static float font_getStringDimensions(Renderer *renderer, Font *font, char *str)
 
     }
 
-    return (xAt); 
+    return (xAt*fontScale); 
 }

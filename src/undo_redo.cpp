@@ -32,10 +32,16 @@ static void init_undo_redo_state(UndoRedoState *state) {
 }
 
 static void push_block(UndoRedoState *state, UndoRedo_BlockType type, size_t byteAt, char *string, int stringLength) {
+    
+    //NOTE: Free strings if the blocks ahead are getting deleted 
+    for(int i = state->at_in_history; i < state->block_count; ++i) {
+        UndoRedoBlock *block = &state->history[i];
+        easyPlatform_freeMemory(block->string);
+    }
+
     state->block_count = state->at_in_history;
 
-    //TODO: Free strings if the blocks ahead are getting deleted 
-
+    //NOTE: If the block history is full, realloc memory
     if(state->block_count >= state->total_block_count) {
         state->total_block_count += 32;
         state->history =(UndoRedoBlock *)easyPlatform_reallocMemory(state->history, state->block_count*sizeof(UndoRedoBlock), state->total_block_count*sizeof(UndoRedoBlock));

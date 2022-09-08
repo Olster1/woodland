@@ -107,6 +107,9 @@ struct PlatformInputState {
 
     PlatformKeyState keyStates[PLATFORM_KEY_TOTAL_COUNT]; 
 
+    //NOTE: If the user double clicked the left mouse button
+    bool doubleClicked;
+
     //NOTE: Mouse data
     float mouseX;
     float mouseY;

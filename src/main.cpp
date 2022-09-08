@@ -543,6 +543,10 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 #endif
 	}
 
+	if(global_platformInput.doubleClicked) {
+		int b = 0;
+	}
+
 	Renderer *renderer = &editorState->renderer;
 
 	//NOTE: Clear the renderer out so we can start again
@@ -812,7 +816,7 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 					editorState->lastQueryString = easyPlatform_allocateStringOnHeap_nullTerminated(queryString);
 					editorState->current_search_reults = string_utf8_find_sub_string((char *)buffer_to_draw.memory, editorState->lastQueryString);
 					if(editorState->current_search_reults.byteOffsetCount > 0) {
-						editorState->current_search_reults.sub_string_width = font_getStringDimensions(renderer, &editorState->font, editorState->lastQueryString);
+						editorState->current_search_reults.sub_string_width = font_getStringDimensions(renderer, &editorState->font, editorState->lastQueryString, editorState->fontScale);
 					}
 				}
 			} else {
