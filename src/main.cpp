@@ -740,7 +740,9 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 					float speed_factor = 10.0f;
 
 					if(user_scrolled) {
-						open_buffer->scroll_dp = make_float2(speed_factor*global_platformInput.mouseScrollX, -speed_factor*global_platformInput.mouseScrollY);
+						// open_buffer->scroll_dp = make_float2(speed_factor*global_platformInput.mouseScrollX, -speed_factor*global_platformInput.mouseScrollY);
+						open_buffer->scroll_dp.x += speed_factor*global_platformInput.mouseScrollX;//dt*open_buffer->scroll_dp.x;
+						open_buffer->scroll_dp.y -= speed_factor*global_platformInput.mouseScrollY;//dt*open_buffer->scroll_dp.y; 
 					}
 
 					open_buffer->scroll_pos.x += dt*open_buffer->scroll_dp.x;

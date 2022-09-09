@@ -35,7 +35,7 @@ It's really just for me as a fun project, something to practice using Direct3d a
 - [x] Add search filter for open buffers
 - [x] Robust Undo/Redo 
 - [x] Ctrl-Find in an open buffer (not fuzzy search)
-- [ ] Shift highlighting of multiple lines to cut, copy & delete text - both with Shift-Arrows and Mouse Click-Drag
+- [x] Shift highlighting of multiple lines to cut, copy & delete text - both with Shift-Arrows and Mouse Click-Drag
 
 
 - [ ] Ctrl-Find in a whole project (not fuzzy search)

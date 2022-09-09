@@ -278,6 +278,16 @@ static int getCusorPosLineAbove(EditorState *editorState, WL_Buffer *b, Font *fo
 	return new_cursor_pos_inBytes;
 }
 
+//NOTE: helper function to remove text if it is highlighted
+static void remove_text_if_highlighted(Selectable_State *selectable_state, WL_Buffer *b) {
+    if(selectable_state->is_active) {
+        Selectable_Diff diff = selectable_get_bytes_diff(selectable_state);
+        removeTextFromBuffer(b, diff.start, diff.size);
+
+        end_select(selectable_state);
+    }
+}
+
 static void process_buffer_controller(EditorState *editorState, WL_Open_Buffer *open_buffer, WL_Buffer *b, BufferControllerOption option, Selectable_State *selectable_state) {
     //NOTE: Ctrl B -> open buffer chooser
     if(global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown && global_platformInput.keyStates[PLATFORM_KEY_B].pressedCount > 0) 
@@ -323,12 +333,18 @@ static void process_buffer_controller(EditorState *editorState, WL_Open_Buffer *
     }
 
 
-    //NOTE: Ctrl C -> copy text to clipboard
-    if(global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown && global_platformInput.keyStates[PLATFORM_KEY_C].pressedCount > 0 && selectable_state->is_active) 
+    //NOTE: Ctrl X -> cut text to clipboard
+    if(global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown && global_platformInput.keyStates[PLATFORM_KEY_X].pressedCount > 0) 
     {
-        Selectable_Diff diff = selectable_get_bytes_diff(selectable_state);
-        platform_copy_text_utf8_to_clipboard((char *)(((u8 *)b->bufferMemory) + diff.start), diff.size);
+        if(selectable_state->is_active) {
+            Selectable_Diff diff = selectable_get_bytes_diff(selectable_state);
+            platform_copy_text_utf8_to_clipboard((char *)(((u8 *)b->bufferMemory) + diff.start), diff.size);
 
+            remove_text_if_highlighted(selectable_state, b);
+
+        } else {
+            //NOTE: cut whole line
+        }
     }
 
 
@@ -353,6 +369,9 @@ static void process_buffer_controller(EditorState *editorState, WL_Open_Buffer *
             }
             
         }
+
+        remove_text_if_highlighted(selectable_state, b);
+
         addTextToBuffer(b, (char *)global_platformInput.textInput_utf8, b->cursorAt_inBytes);
 
         if(open_buffer) {
@@ -449,12 +468,19 @@ static void process_buffer_controller(EditorState *editorState, WL_Open_Buffer *
 
         if(command == PLATFORM_KEY_BACKSPACE && b->cursorAt_inBytes > 0) {
             if(open_buffer) {
+                //NOTE: de activate the move vertical position so it gets a new one next time
                 open_buffer->moveVertical_xPos = -1;
             }
-
-            u32 bytesOfPrevRune = size_of_last_utf8_codepoint_in_bytes((char *)&b->bufferMemory[b->cursorAt_inBytes], b->cursorAt_inBytes);
-            removeTextFromBuffer(b, b->cursorAt_inBytes - bytesOfPrevRune, bytesOfPrevRune);
-           
+            size_t startByte = 0;
+            size_t totalBytes = 0;
+            if(selectable_state->is_active) {
+                remove_text_if_highlighted(selectable_state, b);
+            } else {
+                u32 bytesOfPrevRune = size_of_last_utf8_codepoint_in_bytes((char *)&b->bufferMemory[b->cursorAt_inBytes], b->cursorAt_inBytes);
+                startByte = b->cursorAt_inBytes - bytesOfPrevRune;
+                totalBytes = bytesOfPrevRune;
+                removeTextFromBuffer(b, startByte, totalBytes);
+            }
 
             if(open_buffer) {
                 open_buffer->is_up_to_date = false;
