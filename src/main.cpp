@@ -731,6 +731,7 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 				bool user_scrolled = false;
 				if(get_abs_value(global_platformInput.mouseScrollX) > 0 || get_abs_value(global_platformInput.mouseScrollY) > 0) {
 					open_buffer->should_scroll_to = false;
+					
 					user_scrolled = true;
 				}
 		

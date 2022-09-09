@@ -367,6 +367,43 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 	//NOTE: Draw the cursor
 	if(is_active) {
 
+		
+		if(memory_offset == buffer_to_draw.cursor_at) {
+			assert(!got_cursor);
+			cursorX = xAt;
+			cursorY = yAt;
+
+			got_cursor = true;
+		}
+
+		assert(got_cursor);
+
+		pushShader(renderer, &textureShader);
+
+		//NOTE: Draw the cursor
+		float cursor_width = easyFont_getGlyph(&font, 'M').width;
+
+		float2 scale = make_float2(cursor_width*fontScale, font.fontHeight*fontScale);
+
+		pushTexture(renderer, global_white_texture, make_float3(cursorX, cursorY + 0.25f*font.fontHeight*fontScale, 1.0f), scale, editorState->color_palette.standard, make_float4(0, 1, 0, 1));
+
+
+		if(open_buffer->should_scroll_to) { 
+			if(cursorX < window_bounds.minX || cursorX > window_bounds.maxX) {
+				float factor = 0.5f*window_scale.x;
+				if(cursorX < window_bounds.minX) { factor *= -1; }
+				open_buffer->scroll_target_pos = make_float2(open_buffer->scroll_pos.x + factor, open_buffer->scroll_target_pos.y);
+			}
+
+			if(cursorY > -window_bounds.minY || cursorY < -window_bounds.maxY) {
+				float factor = -0.5f*window_scale.y;
+				if(cursorY < -window_bounds.maxY) { factor *= -1; }
+				open_buffer->scroll_target_pos = make_float2(open_buffer->scroll_target_pos.x, open_buffer->scroll_pos.y + factor);
+			}
+		} else {
+			open_buffer->scroll_target_pos = make_float2(open_buffer->scroll_pos.x, open_buffer->scroll_pos.y);
+		}
+
 		if(tried_clicking) {
 			if(closest_click_distance.x != FLT_MAX) { //NOTE: See if this is a valid position 
 				b->cursorAt_inBytes = convert_compiled_byte_point_to_buffer_byte_point(b, closest_click_buffer_point);
@@ -401,42 +438,32 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 			//NOTE: We are dragging 
 			update_select(&open_buffer->selectable_state, b->cursorAt_inBytes);
 
-			//NOTE: Check if we should the page up or down
+			//NOTE: How far to jump when we're trying to scroll and get to the edges
+			float scroll_factor = 0.05f;
+			float2 jump_distance = make_float2(scroll_factor*window_scale.x, scroll_factor*window_scale.y);
+
+			//NOTE: Check if we should the page up or down or left or right
+			float offsetMargin = 50;
+			if(mouse_point_top_left_origin.y < window_bounds.minY + offsetMargin) {
+				//NOTE: Trying to move up
+				open_buffer->scroll_target_pos = make_float2(open_buffer->scroll_target_pos.x, open_buffer->scroll_pos.y - jump_distance.y);
+			}
+			if(mouse_point_top_left_origin.y > window_bounds.maxY - offsetMargin) {
+				//NOTE: Trying to move down
+				open_buffer->scroll_target_pos = make_float2(open_buffer->scroll_target_pos.x, open_buffer->scroll_pos.y + jump_distance.y);
+				
+			}
+			if(mouse_point_top_left_origin.x < window_bounds.minX + offsetMargin) {
+				//NOTE: Trying to move right
+				open_buffer->scroll_target_pos = make_float2(open_buffer->scroll_pos.x - jump_distance.x, open_buffer->scroll_target_pos.y);
+			}
+			if(mouse_point_top_left_origin.x > window_bounds.maxX - offsetMargin) {
+				//NOTE: Trying to move left
+				open_buffer->scroll_target_pos = make_float2(open_buffer->scroll_pos.x + jump_distance.x, open_buffer->scroll_target_pos.y);
+			}
 			
 		}
 		
-
-		if(memory_offset == buffer_to_draw.cursor_at) {
-			assert(!got_cursor);
-			cursorX = xAt;
-			cursorY = yAt;
-
-			got_cursor = true;
-		}
-
-		assert(got_cursor);
-
-		pushShader(renderer, &textureShader);
-
-		//NOTE: Draw the cursor
-		float cursor_width = easyFont_getGlyph(&font, 'M').width;
-
-		float2 scale = make_float2(cursor_width*fontScale, font.fontHeight*fontScale);
-
-		pushTexture(renderer, global_white_texture, make_float3(cursorX, cursorY + 0.25f*font.fontHeight*fontScale, 1.0f), scale, editorState->color_palette.standard, make_float4(0, 1, 0, 1));
-
-		open_buffer->scroll_target_pos = make_float2(open_buffer->scroll_pos.x, open_buffer->scroll_pos.y);
-
-		if(open_buffer->should_scroll_to) { 
-			if(cursorX < window_bounds.minX || cursorX > window_bounds.maxX) {
-				open_buffer->scroll_target_pos = make_float2(cursorX - startX - 0.5f*window_scale.x, open_buffer->scroll_target_pos.y);
-			}
-
-			if(cursorY > -window_bounds.minY || cursorY < -window_bounds.maxY) {
-				open_buffer->scroll_target_pos = make_float2(open_buffer->scroll_target_pos.x, get_abs_value(cursorY - startY) - 0.5f*window_scale.y);
-			}
-		} 
-
 		pushShader(renderer, &textureShader);
 
 		//NOTE: This is drawing the selectable overlay 
