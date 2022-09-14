@@ -34,7 +34,6 @@
 
 #include "../debug_stats.h"
 
-// #include "./win32/win32_threads.cpp"
 
 static DEBUG_stats global_debug_stats = {};
 
@@ -342,6 +341,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
             keyType = PLATFORM_KEY_Z;
             //ADD to buffer for redo undo to follow the windows wait feel
             addToCommandBuffer = keyIsDown;
+         } else if(vk_code == 'A') {
+            keyType = PLATFORM_KEY_A;
         } else if(vk_code == VK_OEM_2) {
             keyType = PLATFORM_KEY_FULL_FORWARD_SLASH;
         } else if(vk_code == VK_OEM_PERIOD) {
@@ -362,6 +363,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
             addToCommandBuffer = keyIsDown;
         } else if(vk_code == 'C') {
             keyType = PLATFORM_KEY_C;
+            addToCommandBuffer = keyIsDown;
         } else if(vk_code == 'S') {
             keyType = PLATFORM_KEY_S;
         } else if(vk_code == 'Y') {
@@ -372,18 +374,22 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
             keyType = PLATFORM_KEY_B;
         } else if(vk_code == 'F') {
             keyType = PLATFORM_KEY_F;
+        } else if(vk_code == 'G') {
+            keyType = PLATFORM_KEY_G;
         } else if(vk_code == VK_SHIFT) {
             keyType = PLATFORM_KEY_SHIFT;
         } else if(vk_code == VK_F5) {
             keyType = PLATFORM_KEY_F5;
         } else if(vk_code == 'X') {
             keyType = PLATFORM_KEY_X;
+            addToCommandBuffer = keyIsDown;
         } else if(vk_code == 'P') {
             keyType = PLATFORM_KEY_P;
         } else if(vk_code == 'O') {
             keyType = PLATFORM_KEY_O;
         } else if(vk_code == 'V') {
             keyType = PLATFORM_KEY_V;
+            addToCommandBuffer = keyIsDown;
         } else if(vk_code == VK_OEM_MINUS) {
             keyType = PLATFORM_KEY_MINUS;
         } else if(vk_code == VK_OEM_PLUS) {
@@ -471,7 +477,57 @@ static void platform_copy_text_utf8_to_clipboard(char *text, size_t str_size_in_
      
 }
 
+static u16 *platform_utf8_to_wide_char(char *string_utf8, Memory_Arena *arena) {
 
+    WCHAR *result = 0;
+
+    int characterCount = MultiByteToWideChar(CP_UTF8, 0, string_utf8, -1, 0, 0);
+
+    size_t bufferSize_inBytes = (characterCount + 1)*sizeof(u16);
+
+    result = (WCHAR *)pushSize(&globalPerFrameArena, bufferSize_inBytes);
+
+    size_t bytesWritten = MultiByteToWideChar(CP_UTF8, 0, string_utf8, -1, (LPWSTR)result, characterCount);
+
+    return (u16 *)result;
+}
+
+
+static u64 platform_get_file_time_utf8_filename(char *utf8_file_name) {
+    u64 result = 0;
+
+    DWORD desired_access = GENERIC_READ;
+    DWORD share_mode = 0;
+    SECURITY_ATTRIBUTES security_attributes = { (DWORD)sizeof(SECURITY_ATTRIBUTES) };
+    DWORD creation_disposition = OPEN_EXISTING;
+    DWORD flags_and_attributes = 0;
+    HANDLE template_file = 0;
+    
+    WCHAR *path16 = (WCHAR *)platform_utf8_to_wide_char(utf8_file_name, &globalPerFrameArena);
+
+    HANDLE FileHandle = CreateFileW((WCHAR*)path16,
+                           desired_access,
+                           share_mode,
+                           &security_attributes,
+                           creation_disposition,
+                           flags_and_attributes,
+                           template_file);
+    
+    if(FileHandle != INVALID_HANDLE_VALUE) {
+        FILETIME creationTime;
+        FILETIME accessTime;
+        FILETIME writeTime;
+
+        //NOTE: Get the file time for the file
+        if(GetFileTime(FileHandle, &creationTime, &accessTime, &writeTime)) {
+            //NOTE: Combine the low and high date time into the u64 value
+            result = writeTime.dwLowDateTime;
+            result = result | (((u64)writeTime.dwHighDateTime) << 32);
+        }
+    }
+
+    return result;
+}
 static char *platform_get_text_utf8_from_clipboard(Memory_Arena *arena) {
     // Try opening the clipboard
      if (! OpenClipboard(nullptr)) {
@@ -591,22 +647,6 @@ static void *platform_wide_char_to_utf8_allocates_on_heap(void *win32_wideString
 
     return result;
 }
-
-static u16 *platform_utf8_to_wide_char(char *string_utf8, Memory_Arena *arena) {
-
-    WCHAR *result = 0;
-
-    int characterCount = MultiByteToWideChar(CP_UTF8, 0, string_utf8, -1, 0, 0);
-
-    size_t bufferSize_inBytes = (characterCount + 1)*sizeof(u16);
-
-    result = (WCHAR *)pushSize(&globalPerFrameArena, bufferSize_inBytes);
-
-    size_t bytesWritten = MultiByteToWideChar(CP_UTF8, 0, string_utf8, -1, (LPWSTR)result, characterCount);
-
-    return (u16 *)result;
-}
-
 
 
 static Platform_File_Handle platform_begin_file_write_utf8_file_path (char *path_utf8) {
@@ -776,7 +816,7 @@ static bool platform_does_file_exist(u16 *wide_file_name) {
 
 
 
-static bool Platform_LoadEntireFile_wideChar(void *filename_wideChar_, void **data, size_t *data_size) {
+static bool Platform_LoadEntireFile_wideChar(void *filename_wideChar_, void **data, size_t *data_size, u64 *timeStamp) {
 
     LPWSTR filename_wideChar = (LPWSTR)filename_wideChar_;
 
@@ -801,6 +841,17 @@ static bool Platform_LoadEntireFile_wideChar(void *filename_wideChar_, void **da
         
         if((file = CreateFileW(filename_wideChar, desired_access, share_mode, &security_attributes, creation_disposition, flags_and_attributes, template_file)) != INVALID_HANDLE_VALUE)
         {
+            FILETIME creationTime;
+            FILETIME accessTime;
+            FILETIME writeTime;
+
+            //NOTE: Get the file time for the file
+            if(GetFileTime(file, &creationTime, &accessTime, &writeTime)) {
+                //NOTE: Combine the low and high date time into the u64 value
+                *timeStamp = writeTime.dwLowDateTime;
+                *timeStamp = *timeStamp | (((u64)writeTime.dwHighDateTime) << 32);
+            }
+
             DWORD read_bytes = GetFileSize(file, 0);
             if(read_bytes)
             {
@@ -866,8 +917,9 @@ static bool Platform_LoadEntireFile_utf8(char *filename_utf8, void **data, size_
         assert(sizeCheck != sizeInBytes);
 
     }
-
-    bool result = Platform_LoadEntireFile_wideChar(filename_wideChar, data, data_size);
+    u64 fileTime;
+    
+    bool result = Platform_LoadEntireFile_wideChar(filename_wideChar, data, data_size, &fileTime);
 
     platform_free_memory(filename_wideChar);
 
@@ -894,6 +946,9 @@ static float2 platform_get_window_xy_pos() {
 #include "../render_backend/d3d_render.cpp"
 
 #include "../main.cpp"
+
+EditorState *global_editorState; //NOTE: FOr threads to access
+#include "./win32_threads.cpp"
 
 
 int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int cmdshow)
@@ -1012,8 +1067,9 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int
 
     //NOTE: To store the last time in
     double currentTimeInSeconds = 0.0;
-    
 
+    //NOTE: Init the threads
+    win32_init_threads(hwnd);
 
     bool running = true;
     while(running) {
@@ -1124,7 +1180,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hInstPrev, PSTR cmdline, int
         GetClientRect(hwnd, &winRect);
 
         EditorState *editorState = updateEditor(dt, (float)(winRect.right - winRect.left), (float)(winRect.bottom - winRect.top), resized_window && !first_frame, save_file_location_utf8, settings_to_save);
-
+        global_editorState = editorState; //NOTE: Assign editor state
 
         // //NOTE: Process our command buffer
         // for(int i = 0; i < global_platformInput.keyInputCommand_count; ++i) {

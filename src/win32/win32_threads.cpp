@@ -6,7 +6,7 @@ struct thread_work
 {
     thread_work_function *FunctionPtr;
     void *Data;
-    b32 Finished;
+    bool Finished;
 };
 
 struct thread_info
@@ -38,7 +38,7 @@ typedef PLATFORM_PUSH_WORK_ONTO_QUEUE(platform_push_work_onto_queue);
 PLATFORM_PUSH_WORK_ONTO_QUEUE(Win32PushWorkOntoQueue) {
     for(;;)
     {
-        u32 OnePastTheHead = (Info->IndexToAddTo + 1) % ArrayCount(Info->WorkQueue);
+        u32 OnePastTheHead = (Info->IndexToAddTo + 1) % arrayCount(Info->WorkQueue);
         if(Info->WorkQueue[Info->IndexToAddTo].Finished && OnePastTheHead != Info->IndexToTakeFrom)
         {
             thread_work *Work = Info->WorkQueue + Info->IndexToAddTo; 
@@ -49,7 +49,7 @@ PLATFORM_PUSH_WORK_ONTO_QUEUE(Win32PushWorkOntoQueue) {
             MemoryBarrier();
             _ReadWriteBarrier();
             
-            ++Info->IndexToAddTo %= ArrayCount(Info->WorkQueue);
+            ++Info->IndexToAddTo %= arrayCount(Info->WorkQueue);
             
             MemoryBarrier();
             _ReadWriteBarrier();
@@ -74,7 +74,7 @@ GetWorkOffQueue(thread_info *Info, thread_work **WorkRetrieved)
     u32 OldValue = Info->IndexToTakeFrom;
     if(OldValue != Info->IndexToAddTo)
     {
-        u32 NewValue = (OldValue + 1) % ArrayCount(Info->WorkQueue);
+        u32 NewValue = (OldValue + 1) % arrayCount(Info->WorkQueue);
         if(InterlockedCompareExchange(&Info->IndexToTakeFrom, NewValue, OldValue) == OldValue)
         {
             *WorkRetrieved = Info->WorkQueue + OldValue;
@@ -90,13 +90,30 @@ Win32DoThreadWork(thread_info *Info)
     while(GetWorkOffQueue(Info, &Work))
     {
         Work->FunctionPtr(Work->Data);
-        Assert(!Work->Finished);
+        assert(!Work->Finished);
         
         MemoryBarrier();
         _ReadWriteBarrier();
         
         Work->Finished = true;
         
+    }
+}
+
+
+static DWORD Win32_fileStampCheckerThreaded(LPVOID Info_)
+{
+    thread_info *Info = (thread_info *)Info_;
+    
+    for(;;)
+    {
+        //NOTE: Check all file stamps
+        if(global_editorState) {
+            thread_work_check_file_stamps(global_editorState);
+        }
+        
+        int time_interval_in_seconds = 5;
+        Sleep(time_interval_in_seconds*1000); //NOTE: Convert to milliseconds
     }
 }
 
@@ -114,12 +131,12 @@ Win32ThreadEntryPoint(LPVOID Info_)
     
 }
 
-inline b32
+inline bool
 IsWorkFinished(thread_info *Info)
 {
-    b32 Result = true;
+    bool Result = true;
     for(u32 WorkIndex = 0;
-        WorkIndex < ArrayCount(Info->WorkQueue);
+        WorkIndex < arrayCount(Info->WorkQueue);
         ++WorkIndex)
     {
         Result &= Info->WorkQueue[WorkIndex].Finished;
@@ -141,25 +158,10 @@ WaitForWorkToFinish(thread_info *Info)
 THREAD_WORK_FUNCTION(PrintTest)
 {
     char *String = (char *)Data;
-    OutputDebugString(String);
+    // OutputDebugString(String);
 }
 
-THREAD_WORK_FUNCTION(MessageLoop)
-{
-    HWND WindowHandle = (HWND)(Data);
-    MSG Message;
-    for(;;)
-    {
-        while(PeekMessage(&Message, WindowHandle, 0, 0, PM_REMOVE))
-        {
-            TranslateMessage(&Message);
-            DispatchMessage(&Message);
-        }
-    }
-}
-
-
-static void win32_init_threads() {
+static void win32_init_threads(LPVOID windowHandle) {
     SYSTEM_INFO SystemInfo;
     GetSystemInfo(&SystemInfo);
     
@@ -170,11 +172,12 @@ static void win32_init_threads() {
     thread_info ThreadInfo = {};
     ThreadInfo.Semaphore = CreateSemaphore(0, 0, NumberOfUnusedProcessors, 0);
     ThreadInfo.IndexToTakeFrom = ThreadInfo.IndexToAddTo = 0;
-    ThreadInfo.WindowHandle = WindowHandle;
-    ThreadInfo.WindowDC = WindowDC;
+    ThreadInfo.WindowHandle = windowHandle;
+
+    // ThreadInfo.WindowDC = windowDC;
     
     for(u32 WorkIndex = 0;
-        WorkIndex < ArrayCount(ThreadInfo.WorkQueue);
+        WorkIndex < arrayCount(ThreadInfo.WorkQueue);
         ++WorkIndex)
     {
         ThreadInfo.WorkQueue[WorkIndex].Finished = true;
@@ -183,17 +186,22 @@ static void win32_init_threads() {
     HANDLE Threads[12];
     u32 ThreadCount = 0;
     
-    s32 CoreCount = Min(NumberOfUnusedProcessors, ArrayCount(Threads));
-    
+    s32 CoreCount = min(NumberOfUnusedProcessors - 1, arrayCount(Threads));
+    #if 0
     for(u32 CoreIndex = 0;
         CoreIndex < (u32)CoreCount;
         ++CoreIndex)
     {
-        HGLRC ContextForThisThread =  Global_wglCreateContextAttribsARB(WindowDC, MainRenderContext, OpenGLAttribs);
+        // HGLRC ContextForThisThread =  Global_wglCreateContextAttribsARB(WindowDC, MainRenderContext, OpenGLAttribs);
         
-        ThreadInfo.ContextForThread = ContextForThisThread;
-        Assert(ThreadCount < ArrayCount(Threads));
+        // ThreadInfo.ContextForThread = ContextForThisThread;
+        assert(ThreadCount < arrayCount(Threads));
         Threads[ThreadCount++] = CreateThread(0, 0, Win32ThreadEntryPoint, &ThreadInfo, 0, 0);
     }
+    #endif
+
+    //NOTE: We create just one thread for file stamps
+    assert(ThreadCount < arrayCount(Threads));
+    Threads[ThreadCount++] = CreateThread(0, 0, Win32_fileStampCheckerThreaded, &ThreadInfo, 0, 0);
     
 }

@@ -3,6 +3,8 @@ enum Ui_Type {
 	WL_INTERACTION_RESIZE_WINDOW,
 	WL_INTERACTION_SELECT_WINDOW,
 	WL_INTERACTION_SELECT_DROP_DOWN,
+	WL_INTERACTION_SCROLL_WINDOW_X,
+	WL_INTERACTION_SCROLL_WINDOW_Y
 
 };
 
@@ -19,14 +21,17 @@ struct Ui_State {
 	//		till it moves again.
 	float2 last_mouse_pos;
 	bool use_mouse;
+
+	float2 dragOffset;
 };
 
-static void try_begin_interaction(Ui_State *state, Ui_Type type, int window_id) {
+static void try_begin_interaction(Ui_State *state, Ui_Type type, int window_id, float2 dragOffset = make_float2(0, 0)) {
 	if(state->id.id < 0) { //NO interactions current
 		state->id.id = window_id;
 		state->id.type = type;
 		//NOTE: Default to use mouse action istead of keyboard
 		state->use_mouse = true;
+		state->dragOffset = dragOffset;
 	}
 }
 

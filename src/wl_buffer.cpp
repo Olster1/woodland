@@ -84,7 +84,7 @@ static void makeGapBuffer_(WL_Buffer *b, int byteStart, int gapSize) {
 
 }
 
-static void addTextToBuffer(WL_Buffer *b, char *str, int indexStart, bool should_add_to_history = true) {
+static void addTextToBuffer(WL_Buffer *b, char *str, int indexStart, bool should_add_to_history = true, s32 groupId = -1) {
 
 #if !DEBUG_BUILD
 	if(indexStart != b->cursorAt_inBytes) {
@@ -97,7 +97,7 @@ static void addTextToBuffer(WL_Buffer *b, char *str, int indexStart, bool should
 	if(strSize_inBytes > 0) {
 
 		if(should_add_to_history) {
-			push_block(&b->undo_redo_state, UNDO_REDO_INSERT, b->cursorAt_inBytes, nullTerminate(str, strSize_inBytes), strSize_inBytes);
+			push_block(&b->undo_redo_state, UNDO_REDO_INSERT, b->cursorAt_inBytes, nullTerminate(str, strSize_inBytes), strSize_inBytes, b->cursorAt_inBytes, groupId);
 		}
 		
 		int gapBufferSize = (int)b->gapBuffer_endAt - (int)b->gapBuffer_startAt;
@@ -143,7 +143,7 @@ static void endGapBuffer(WL_Buffer *b) {
 }
 
 
-static void removeTextFromBuffer(WL_Buffer *b, int bytesStart, int toRemoveCount_inBytes, bool should_add_to_history = true) {
+static void removeTextFromBuffer(WL_Buffer *b, int bytesStart, int toRemoveCount_inBytes, bool should_add_to_history = true, s32 groupId = -1) {
 	
 #if !DEBUG_BUILD
 	if(bytesStart != b->cursorAt_inBytes) {
@@ -165,7 +165,7 @@ static void removeTextFromBuffer(WL_Buffer *b, int bytesStart, int toRemoveCount
 
 	if(should_add_to_history) {
 		//NOTE: only add if this is a new command, not a repeat of the text 
-		push_block(&b->undo_redo_state, UNDO_REDO_DELETE, b->gapBuffer_startAt, nullTerminate((char *)(b->bufferMemory + b->gapBuffer_startAt), toRemoveCount_inBytes), toRemoveCount_inBytes);
+		push_block(&b->undo_redo_state, UNDO_REDO_DELETE, b->gapBuffer_startAt, nullTerminate((char *)(b->bufferMemory + b->gapBuffer_startAt), toRemoveCount_inBytes), toRemoveCount_inBytes, b->cursorAt_inBytes, groupId);
 	} 
 
 	 b->cursorAt_inBytes = bytesStart;
@@ -288,65 +288,85 @@ static size_t convert_compiled_byte_point_to_buffer_byte_point(WL_Buffer *b, siz
 	return result;
 }
 
+//NOTE: To protect the integrity of the undo-redo buffer, we put this pretiffy into the undero-redo state aswell. 
+//		Except we group them as one contigous undo-redo 
 static void prettify_buffer(WL_Buffer *b) {
 	endGapBuffer(b);
-
-	WL_Buffer copy_buffer = *b;
-	copy_buffer.bufferSize_inUse_inBytes = 0;
-	copy_buffer.bufferSize_inBytes = 0;
-	copy_buffer.bufferMemory = 0;
 
 	//NOTE: Start the file with a new line
 	bool hitNewLine = true;
 
 	int byteAt = 0;
 
+	s32 currentGroupId = b->undo_redo_state.groupIdAt++;
+
 	int depthAt = 0;
-	for(int i = 0; i < b->bufferSize_inUse_inBytes; ++i) {
-		{
-			u8 byte = b->bufferMemory[i];
 
-			if(hitNewLine && byte == ' ' || byte == '\t') {
-				//NOTE: We eat tabs and spaces
+	char *str = (char *)(b->bufferMemory);
 
-			} else {
-				if(byte == '{') {
-					depthAt++;
-				} else if(byte == '}') {
-					depthAt--;
-					if(depthAt < 0) { depthAt = 0; }
-				}
-				
-				
-				
-				if(hitNewLine) {
-					for(int i = 0; i < depthAt; i++) {
+	while (*str) {
+		u8 byte = str[0];
+
+		int incrementCount = 1;
+
+		if(hitNewLine && (byte == ' ' || byte == '\t')) {
+			//NOTE: We eat tabs and spaces if we are on a new line 
+			//		This removes them then we add tabs in when we hit a glyph 
+			char *temp = str;
+
+			while(*str && str[0] == ' ' || str[0] == '\t') { //NOTE: Find how much white space we had
+				str++;
+			}
+			
+			char *start = (char *)(b->bufferMemory);
+			removeTextFromBuffer(b, temp - start, (str - temp));
+
+			endGapBuffer(b);
+			
+			//NOTE: because we modify the buffer we set rebase the pointer we're looping through
+			str = (char *)(b->bufferMemory + b->cursorAt_inBytes);
+
+			incrementCount = 0;
+		} else {
+			if(byte == '{') {
+				depthAt++;
+			} else if(byte == '}') {
+				depthAt--;
+				if(depthAt < 0) { depthAt = 0; }
+			}
+			
+			if(hitNewLine) {
+				char *temp = 0;
+				for(int i = 0; i < depthAt; i++) {
+
+					if(!temp) {
+						temp = "\t";
+					} else {
 						//NOTE: Add in the tabs
-						char *str = "\t";
-						addTextToBuffer(&copy_buffer, str, byteAt++, false);
+						temp = easy_createString_printf(&globalPerFrameArena, "%s%s", temp, "\t");
 					}
 				}
+				if(temp) {
+					char *start = (char *)(b->bufferMemory);
+					addTextToBuffer(b, temp, (str - start), true, currentGroupId);
+					endGapBuffer(b);
+			
+					//NOTE: because we modify the buffer we set rebase the pointer we're looping through
+					str = (char *)(b->bufferMemory + b->cursorAt_inBytes);
 
-				//NOTE: Add in text 
-				char temp[] = {(char)byte};
-				addTextToBuffer(&copy_buffer, temp, byteAt++, false);
-
-				hitNewLine = false;
-
-				if(byte == '\n' || byte == '\r') {
-					//NOTE: We're at a new line so we have to indent, but only if we hit some new text
-					hitNewLine = true;
-				} 
+					incrementCount = 0;
+				}
 			}
+
+			hitNewLine = false;
+
+			if(byte == '\n' || byte == '\r') {
+				//NOTE: We're at a new line so we have to indent, but only if we hit some new text
+				hitNewLine = true;
+			} 
 		}
+
+		str += incrementCount;
 	}
 
-	platform_free_memory(b->bufferMemory);
-	copy_buffer.cursorAt_inBytes = b->cursorAt_inBytes;
-	if(copy_buffer.cursorAt_inBytes >= copy_buffer.bufferSize_inUse_inBytes) {
-		copy_buffer.cursorAt_inBytes = max(0, copy_buffer.bufferSize_inUse_inBytes - 1);
-	}
-
-	*b = copy_buffer;
-	
 }

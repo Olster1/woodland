@@ -35,7 +35,8 @@ static Settings_To_Save load_settings(char *utf8_full_file_name) {
 
 		Settings_To_Save *data = 0;
 		size_t data_size = 0;
-		bool worked = Platform_LoadEntireFile_wideChar(file_name_wide, (void **)&data, &data_size);
+		u64 fileTime;
+		bool worked = Platform_LoadEntireFile_wideChar(file_name_wide, (void **)&data, &data_size, &fileTime);
 
 		if(worked && data_size == (sizeof(Settings_To_Save))) {
 			// data->window_width;

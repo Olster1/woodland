@@ -1,16 +1,5 @@
 #include "wl_memory.h"
 #include "file_helper.cpp"
-#include "lex_utf8.h"
-#include "color.cpp"
-#include "selectable.cpp"
-#include "undo_redo.cpp"
-#include "wl_buffer.cpp"
-#include "wl_ast.cpp"
-#include "font.cpp"
-#include "ui.cpp"
-#include "save_settings.cpp"
-
-
 
 inline char *easy_createString_printf(Memory_Arena *arena, char *formatString, ...) {
 
@@ -29,11 +18,15 @@ inline char *easy_createString_printf(Memory_Arena *arena, char *formatString, .
     return strArray;
 }
 
-/*
-Next:
-
-
-*/
+#include "lex_utf8.h"
+#include "color.cpp"
+#include "selectable.cpp"
+#include "undo_redo.cpp"
+#include "wl_buffer.cpp"
+#include "wl_ast.cpp"
+#include "font.cpp"
+#include "ui.cpp"
+#include "save_settings.cpp"
 
 
 #define MAX_WINDOW_COUNT 8
@@ -45,12 +38,19 @@ typedef enum {
 	MODE_FIND,
 	MODE_CALCULATE,
 	MODE_JAVASCRIPT_REPL,
+	MODE_GO_TO_LINE,
 } EditorMode;
 
 typedef struct {
 	char *name;
 	char *file_name_utf8;
 	bool is_up_to_date;
+
+	//NOTE: We have both of these since threads can change the current time stamp. 
+	//		THen it is up to the main thread to update the buffer accordingly
+	u64 last_time_stamp;
+	volatile u64 current_time_stamp;
+
 	float2 scroll_pos;
 	float2 scroll_target_pos; //NOTE: Velocity of our scrolling
 	float2 scroll_dp;
@@ -63,7 +63,9 @@ typedef struct {
 
 	//NOTE: What's selected in the buffer
 	Selectable_State selectable_state;
-	u32 current_save_undo_redo_id;
+
+	//NOTE: Negative 1 for no states that are saved. Happens when someone saves the file outside of this file.
+	s32 current_save_undo_redo_id;
 
 	EasyAst ast;
  
@@ -122,9 +124,12 @@ typedef struct {
 
 	float line_spacing;
 
+	float wrap_text_width; //NOTE: Negative number to turn wrap text off
+
 } EditorState;
 
 #include "single_search.cpp"
+#include "threads.cpp"
 
 static void set_editor_mode(EditorState *editorState, EditorMode mode) {
 	refresh_buffer(&editorState->searchBar);
@@ -371,7 +376,8 @@ static WL_Open_Buffer *open_file_and_add_to_window(EditorState *editorState, cha
 
 	size_t data_size = 0;
 	void *data = 0;
-	if(Platform_LoadEntireFile_wideChar(file_name_wide_char, &data, &data_size)) {
+	u64 timeStamp;
+	if(Platform_LoadEntireFile_wideChar(file_name_wide_char, &data, &data_size, &timeStamp)) {
 
 		WL_Window *w = 0;
 		if(open_type == OPEN_FILE_INTO_NEW_WINDOW) {
@@ -406,6 +412,7 @@ static WL_Open_Buffer *open_file_and_add_to_window(EditorState *editorState, cha
 		open_buffer->file_name_utf8 = (char *)platform_wide_char_to_utf8_allocates_on_heap(file_name_wide_char);
 		open_buffer->name = getFileLastPortion(open_buffer->file_name_utf8);
 		open_buffer->is_up_to_date = true;
+		open_buffer->current_time_stamp = open_buffer->last_time_stamp = timeStamp;
 
 		platform_free_memory(data);
 
@@ -502,7 +509,9 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
  		
 		editorState->ui_state.id.id = -1;
 
-		editorState->line_spacing = 1.6f; //NOTE: How big it is between lines
+		editorState->line_spacing = 1.2f; //NOTE: How big it is between lines
+
+		editorState->wrap_text_width = -100; //NOTE: Infinity to turn it off to avoid an extra if statement? 
 
 		{
 			editorState->color_palette.background = color_hexARGBTo01(0xFF161616);
@@ -629,6 +638,7 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 		//NOTE: Make sure free the string
 		char *fileNameToOpen_utf16 = (char *)Platform_OpenFile_withDialog_wideChar(&globalPerFrameArena);
 
+		
 		open_file_and_add_to_window(editorState, fileNameToOpen_utf16, OPEN_FILE_INTO_CURRENT_WINDOW);
 
 		// end_select(&editorState->selectable_state);
@@ -645,6 +655,10 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 		WL_Open_Buffer *open_buffer = &editorState->buffers_loaded[w->buffer_index];
 
 		WL_Buffer *b = &open_buffer->buffer;
+
+		#if 1
+		prettify_buffer(b);
+		#else 
 
 		if(!open_buffer->file_name_utf8) {
 			//NOTE: Open a Save Dialog window
@@ -676,6 +690,7 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 		}
 
 		prettify_buffer(b);
+		#endif
 	}
 
 
@@ -692,7 +707,7 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 	WL_Open_Buffer *open_buffer = &editorState->buffers_loaded[w->buffer_index];
 	WL_Buffer *b = &open_buffer->buffer;
 	{
-		open_buffer->scroll_pos = lerp_float2(open_buffer->scroll_pos, open_buffer->scroll_target_pos, 0.3f);
+		open_buffer->scroll_pos = lerp_float2(open_buffer->scroll_pos, open_buffer->scroll_target_pos, 0.7f);
 	}
 	
 
@@ -737,7 +752,7 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 		
 
 				if(!open_buffer->should_scroll_to) {
-					float speed_factor = 10.0f;
+					float speed_factor = 1.0f;
 
 					if(user_scrolled) {
 						// open_buffer->scroll_dp = make_float2(speed_factor*global_platformInput.mouseScrollX, -speed_factor*global_platformInput.mouseScrollY);
@@ -748,7 +763,7 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 					open_buffer->scroll_pos.x += dt*open_buffer->scroll_dp.x;
 					open_buffer->scroll_pos.y += dt*open_buffer->scroll_dp.y; 						
 
-					float drag = 0.9f;
+					float drag = 0.94f;
 
 					//TODO: This should be in a fixed update loop
 
@@ -758,6 +773,79 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 				
 				process_buffer_controller(editorState, open_buffer, b, BUFFER_ALL, &open_buffer->selectable_state);
 			}
+		} break;
+		case MODE_GO_TO_LINE: {
+			//NOTE: Open the go to line
+			WL_Window *w = &editorState->windows[editorState->active_window_index];
+
+			WL_Open_Buffer *open_buffer = &editorState->buffers_loaded[w->buffer_index];
+
+			WL_Buffer *b = &open_buffer->buffer;
+
+			if(global_platformInput.keyStates[PLATFORM_KEY_ESCAPE].pressedCount > 0) {
+				//NOTE: Escape exits the buffer we're on
+				set_editor_mode(editorState, MODE_EDIT_BUFFER);
+			}
+
+			//NOTE: Draw the name of the file
+			pushShader(renderer, &sdfFontShader);
+
+			float16 orthoMatrix = make_ortho_matrix_top_left_corner(windowWidth, windowHeight, MATH_3D_NEAR_CLIP_PlANE, MATH_3D_FAR_CLIP_PlANE);
+			pushMatrix(renderer, orthoMatrix);
+
+			float xAt = 0;
+			float yAt = -2.0f*editorState->font.fontHeight*editorState->fontScale;
+			float spacing = -yAt;
+
+		
+			//NOTE: Update the single search buffer
+			process_buffer_controller(editorState, NULL, &editorState->searchBar.buffer, BUFFER_SIMPLE, &editorState->searchBar.selectable_state, true);
+			//NOTE: Draw the search text
+			char *str = draw_single_search(&editorState->searchBar, renderer, &editorState->font, editorState->fontScale, editorState->color_palette.variable, xAt, yAt + 0.5f*spacing, editorState->color_palette.standard, "GO TO: ");
+
+			//NOTE: User wants to jump to a new line
+			if(global_platformInput.keyStates[PLATFORM_KEY_ENTER].pressedCount > 0 && str[0] != '\0') {
+
+				endGapBuffer(b);
+
+				//TODO: Not 64 bit - should be a size_t 
+				//NOTE: Get the line number to jump to
+				int lineNumber = atoi(str);
+
+				//NOTE: Immediate mode - go through text and find the line number, instead of storing a map of line numbers to byte offsets
+				
+				char *str = (char *)b->bufferMemory; 
+				char *start = str;
+
+				size_t offset = 0;
+
+				int lineNumberAt = 0;
+				if(lineNumber == lineNumberAt) {
+					//NOTE: On first line
+				} else {
+					while(*str) {
+						if(*str == '\n') {
+							lineNumberAt++;
+						}
+
+						//NOTE: See if we found the line
+						if(lineNumber == lineNumberAt) {
+							offset = (str - start);
+							break;
+						}
+						
+						str++;
+					}
+				}
+
+				//NOTE: Set the cursor to the new offset
+				b->cursorAt_inBytes = offset;
+				open_buffer->should_scroll_to = true;
+
+				//NOTE: Exit GO TO mode
+				set_editor_mode(editorState, MODE_EDIT_BUFFER);
+			}
+
 		} break;
 		case MODE_FIND: {
 			WL_Window *w = &editorState->windows[editorState->active_window_index];
@@ -908,11 +996,9 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 			open_buffer->scroll_dp.x = 0;
 		}
 
-		float max_h = (open_buffer->max_scroll_bounds.y - window_scale.y);
+		float max_h = (open_buffer->max_scroll_bounds.y);
 
 		if(max_h < 0) { max_h = 0; padding.y = 0; }
-
-		max_h += padding.y;
 
 		if(open_buffer->scroll_pos.y > max_h) {
 			open_buffer->scroll_pos.y = max_h;
@@ -920,12 +1006,37 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 		}
 
 	}
+
+	//NOTE: Check if the user tried clicking in this window
+	//		If so switch to this window as the active buffer
+	//		We do this before the loop below so you don't see any 1 frame hiccups when you click
+	for(int i = 0; i < editorState->window_count_used; ++i) {
+		WL_Window *w = &editorState->windows[i];
+
+		Rect2f window_bounds = make_rect2f(w->bounds_.minX*windowWidth, w->bounds_.minY*windowWidth, w->bounds_.maxX*windowWidth, w->bounds_.maxY*windowHeight);
+
+		if(in_rect2f_bounds(window_bounds, mouse_point_top_left_origin) && global_platformInput.keyStates[PLATFORM_MOUSE_LEFT_BUTTON].pressedCount > 0) {
+			editorState->active_window_index = i;
+		}
+	}
+
+	//NOTE: End scroll handle interaction if user lets go of the mouse 
+	if(!global_platformInput.keyStates[PLATFORM_MOUSE_LEFT_BUTTON].isDown && (is_interaction_active(&editorState->ui_state, WL_INTERACTION_SCROLL_WINDOW_X) || is_interaction_active(&editorState->ui_state, WL_INTERACTION_SCROLL_WINDOW_Y))) {
+		end_interaction(&editorState->ui_state);
+	}
 	
+
 	for(int i = 0; i < editorState->window_count_used; ++i) {
 		WL_Window *w = &editorState->windows[i];
 		
-
 		WL_Open_Buffer *open_buffer = &editorState->buffers_loaded[w->buffer_index];
+
+		if(open_buffer->current_time_stamp > open_buffer->last_time_stamp) {
+			open_buffer->is_up_to_date = false;
+			//NOTE: No valid save state in the undo redo buffer
+			open_buffer->current_save_undo_redo_id = -1;
+
+		}
 
 		WL_Buffer *b = &open_buffer->buffer;
 

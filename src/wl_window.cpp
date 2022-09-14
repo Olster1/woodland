@@ -53,26 +53,83 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 
 
 	Rect2f window_bounds = make_rect2f(w->bounds_.minX*windowWidth, w->bounds_.minY*windowWidth, w->bounds_.maxX*windowWidth, w->bounds_.maxY*windowHeight);
-
+	
 
 	float handle_width = 10;
 	Rect2f bounds0 = make_rect2f(window_bounds.maxX - handle_width,  window_bounds.minY, window_bounds.maxX + handle_width, window_bounds.maxY);
+
+	
+	float buffer_title_height = font.fontHeight*fontScale;
+	
+	float16 orthoMatrix = make_ortho_matrix_top_left_corner(windowWidth, windowHeight, MATH_3D_NEAR_CLIP_PlANE, MATH_3D_FAR_CLIP_PlANE);
+	pushMatrix(renderer, orthoMatrix);
+	pushScissorsRect(renderer, window_bounds);
+
+
+	float2 window_scale = get_scale_rect2f(window_bounds);
+	{
+		float scroll_handle_width = 25;
+		float window_height = (window_bounds.maxY - window_bounds.minY - buffer_title_height);
+		float scroll_handle_height = 0;
+		if(window_height < open_buffer->max_scroll_bounds.y) {
+			scroll_handle_height = min(1, window_height / open_buffer->max_scroll_bounds.y)*window_height;
+		} else {
+			scroll_handle_height = window_height;
+		}
+
+		float scroll_handle_start_y = (open_buffer->max_scroll_bounds.y > 0) ? (open_buffer->scroll_pos.y / open_buffer->max_scroll_bounds.y)*(window_height - scroll_handle_height) : 0;
+		Rect2f handle_bounds = make_rect2f(window_bounds.maxX - scroll_handle_width,  scroll_handle_start_y + buffer_title_height, window_bounds.maxX, scroll_handle_start_y + scroll_handle_height + buffer_title_height);
+
+		float4 handle_color = editorState->color_palette.function;
+
+		//NOTE: Draw the scroll bar
+		if(editorState->mode_ == MODE_EDIT_BUFFER && in_rect2f_bounds(handle_bounds, mouse_point_top_left_origin))
+		{
+			handle_color = editorState->color_palette.keyword;
+			if(global_platformInput.keyStates[PLATFORM_MOUSE_LEFT_BUTTON].pressedCount > 0) {
+				float2 dragOffset = make_float2(0, mouse_point_top_left_origin.y - scroll_handle_start_y);
+				try_begin_interaction(&editorState->ui_state, WL_INTERACTION_SCROLL_WINDOW_Y, window_index, dragOffset);
+			}
+			
+		}
+
+		
+		if(is_same_interaction(&editorState->ui_state, WL_INTERACTION_SCROLL_WINDOW_Y, window_index)) {
+			handle_color = editorState->color_palette.variable;
+			float mouseY = mouse_point_top_left_origin.y - editorState->ui_state.dragOffset.y;
+
+			//NOTE: Update scroll handle movement
+			float percentage = min(1, mouseY / (window_height - scroll_handle_height));
+			open_buffer->scroll_pos.y = percentage * open_buffer->max_scroll_bounds.y;
+
+			if(open_buffer->scroll_pos.y < 0) { open_buffer->scroll_pos.y = 0; }
+			if(open_buffer->scroll_pos.y > open_buffer->max_scroll_bounds.y) { open_buffer->scroll_pos.y = open_buffer->max_scroll_bounds.y; }
+
+		} 
+
+		//NOTE: Only draw the handle if it is less then the screen height
+		if(scroll_handle_height < window_height) {
+			//NOTE: Update the scroll y position
+			scroll_handle_start_y = (open_buffer->max_scroll_bounds.y > 0) ? (open_buffer->scroll_pos.y / open_buffer->max_scroll_bounds.y)*(window_height - scroll_handle_height) : 0;
+			handle_bounds = make_rect2f(window_bounds.maxX - scroll_handle_width,  scroll_handle_start_y + buffer_title_height, window_bounds.maxX, scroll_handle_start_y + scroll_handle_height + buffer_title_height);
+
+
+			float2 centre = get_centre_rect2f(handle_bounds);
+			float2 scale = get_scale_rect2f(handle_bounds);
+			
+			//NOTE: Draw the scroll handle
+			pushShader(renderer, &textureShader);
+			pushRectOutline(renderer, make_float3(centre.x, -centre.y, 1.0f), scale, handle_color);
+		}
+	}
+
 
 	if(editorState->mode_ == MODE_EDIT_BUFFER && editorState->window_count_used > 1 && window_index < (editorState->window_count_used - 1) && in_rect2f_bounds(bounds0, mouse_point_top_left_origin) && global_platformInput.keyStates[PLATFORM_MOUSE_LEFT_BUTTON].pressedCount > 0)
 	{
 		try_begin_interaction(&editorState->ui_state, WL_INTERACTION_RESIZE_WINDOW, window_index);
 	}
-
-
-
-	float16 orthoMatrix = make_ortho_matrix_top_left_corner(windowWidth, windowHeight, MATH_3D_NEAR_CLIP_PlANE, MATH_3D_FAR_CLIP_PlANE);
-	pushMatrix(renderer, orthoMatrix);
-	pushScissorsRect(renderer, window_bounds);
-
+	
 	pushShader(renderer, &rectOutlineShader);
-
-	float2 window_scale = get_scale_rect2f(window_bounds);
-
 	if(editorState->window_count_used > 1) 
 	{
 
@@ -82,7 +139,6 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 	 	if(in_rect2f_bounds(bounds0, mouse_point_top_left_origin)) {
 	 		color = editorState->color_palette.function;
 	 	}
-
 	 	
 		pushRectOutline(renderer, make_float3(centre.x, -centre.y, 1.0f), window_scale, color);
 	}
@@ -100,7 +156,6 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 	// OutputDebugStringA((LPCSTR)str);
 	// OutputDebugStringA((LPCSTR)"\n");
 
-	float buffer_title_height = font.fontHeight*fontScale;
 
 	float default_hight_light_height = 1.3f*buffer_title_height;
 
@@ -140,9 +195,9 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 	float2 *rectsToDraw_forSearch = 0;
 
 	Highlight_Array *highlight_array = 0;
-	if(is_active) {
-		highlight_array = init_highlight_array(&globalPerFrameArena);
+	highlight_array = init_highlight_array(&globalPerFrameArena);
 
+	if(is_active) {
 		//NOTE: Get the highlight array ready
 		if(get_editor_mode(editorState) == MODE_FIND && editorState->current_search_reults.byteOffsetCount > 0) {
 			search_query = &editorState->current_search_reults;
@@ -232,7 +287,7 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 
 			//NOTE: Draw selectable overlay
 			{
-				if(is_active && &open_buffer->selectable_state.is_active) {
+				if(&open_buffer->selectable_state.is_active) {
 					if(memory_offset == buffer_to_draw.shift_begin) {
 						in_select = true;
 					}
@@ -250,7 +305,7 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 			}
 
 
-			if(rune == '\n' || rune == '\r') {
+			if(rune == '\n' || rune == '\r' || (editorState->wrap_text_width >= 0 && xAt > windowWidth)) {
 				yAt -= newLineIncrement;
 				xAt = startX;
 
@@ -363,31 +418,20 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 	//both should be positive versions
 	open_buffer->max_scroll_bounds.y = get_abs_value(yAt - startY);
 
+	//NOTE: Update cursor postion
+	if(memory_offset == buffer_to_draw.cursor_at) {
+		assert(!got_cursor);
+		cursorX = xAt;
+		cursorY = yAt;
 
-	//NOTE: Draw the cursor
+		got_cursor = true;
+	}
+
+	assert(got_cursor);
+
+	//NOTE:Just active buffer logic
 	if(is_active) {
-
 		
-		if(memory_offset == buffer_to_draw.cursor_at) {
-			assert(!got_cursor);
-			cursorX = xAt;
-			cursorY = yAt;
-
-			got_cursor = true;
-		}
-
-		assert(got_cursor);
-
-		pushShader(renderer, &textureShader);
-
-		//NOTE: Draw the cursor
-		float cursor_width = easyFont_getGlyph(&font, 'M').width;
-
-		float2 scale = make_float2(cursor_width*fontScale, font.fontHeight*fontScale);
-
-		pushTexture(renderer, global_white_texture, make_float3(cursorX, cursorY + 0.25f*font.fontHeight*fontScale, 1.0f), scale, editorState->color_palette.standard, make_float4(0, 1, 0, 1));
-
-
 		if(open_buffer->should_scroll_to) { 
 			if(cursorX < window_bounds.minX || cursorX > window_bounds.maxX) {
 				float factor = 0.5f*window_scale.x;
@@ -465,25 +509,6 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 		}
 		
 		pushShader(renderer, &textureShader);
-
-		//NOTE: This is drawing the selectable overlay 
-		if(open_buffer->selectable_state.is_active) {
-			
-			for(int i = 0; i < highlight_array->number_of_rects; ++i) {
-				Hightlight_Rect *r = highlight_get_rectangle(highlight_array, i); 
-					
-				float2 p = get_centre_rect2f(r->rect);
-				float2 s = get_scale_rect2f(r->rect);	
-
-				float draw_y = p.y + 0.25f*font.fontHeight*fontScale;
-
-				float4 color = editorState->color_palette.function;
-
-				color.w = 0.3f;
-				pushTexture(renderer, global_white_texture, make_float3(p.x, draw_y, 1.0f), s, color, make_float4(0, 0, 1, 1));
-			}
-			
-		}
 		
 		if(rectsToDraw_forSearch) {
 			//NOTE: Get size of search string
@@ -504,9 +529,46 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 				pushRectOutline(renderer, make_float3(c.x, c.y, 1.0f), s, color);
 			}
 		}
+	}
+
+	pushShader(renderer, &textureShader);
+	
+	{
+		//NOTE: Draw the cursor
+		float cursor_width = easyFont_getGlyph(&font, 'M').width;
+
+		float2 scale = make_float2(cursor_width*fontScale, font.fontHeight*fontScale);
+
+		float4 cursorColor = editorState->color_palette.standard;
+
+		if(is_active) {
+			cursorColor = editorState->color_palette.variable;
+		}
+
+		cursorColor.z = 0.5f;
+
+		cursorX -= 0.5f*scale.x;
+		scale.x = 3;
+
+		pushTexture(renderer, global_white_texture, make_float3(cursorX, cursorY + 0.25f*font.fontHeight*fontScale, 1.0f), scale, cursorColor, make_float4(0, 1, 0, 1));
+	}
+	//NOTE: This is drawing the selectable overlay 
+	if(open_buffer->selectable_state.is_active) {
 		
+		for(int i = 0; i < highlight_array->number_of_rects; ++i) {
+			Hightlight_Rect *r = highlight_get_rectangle(highlight_array, i); 
+				
+			float2 p = get_centre_rect2f(r->rect);
+			float2 s = get_scale_rect2f(r->rect);	
 
+			float draw_y = p.y + 0.25f*font.fontHeight*fontScale;
 
+			float4 color = editorState->color_palette.function;
+
+			color.w = 0.3f;
+			pushTexture(renderer, global_white_texture, make_float3(p.x, draw_y, 1.0f), s, color, make_float4(0, 0, 1, 1));
+		}
+		
 	}
 
 	if(get_editor_mode(editorState) == MODE_EDIT_BUFFER) {		

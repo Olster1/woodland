@@ -288,7 +288,7 @@ static void remove_text_if_highlighted(Selectable_State *selectable_state, WL_Bu
     }
 }
 
-static void process_buffer_controller(EditorState *editorState, WL_Open_Buffer *open_buffer, WL_Buffer *b, BufferControllerOption option, Selectable_State *selectable_state) {
+static void process_buffer_controller(EditorState *editorState, WL_Open_Buffer *open_buffer, WL_Buffer *b, BufferControllerOption option, Selectable_State *selectable_state, bool justNumber = false) { //NOTE: Just number could be change to flags if we have more options
     //NOTE: Ctrl B -> open buffer chooser
     if(global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown && global_platformInput.keyStates[PLATFORM_KEY_B].pressedCount > 0) 
     {
@@ -302,6 +302,17 @@ static void process_buffer_controller(EditorState *editorState, WL_Open_Buffer *
 
     }
 
+      //NOTE: Ctrl G -> jump to line
+    if(global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown && global_platformInput.keyStates[PLATFORM_KEY_G].pressedCount > 0) 
+    {
+         if(editorState->mode_ == MODE_GO_TO_LINE){
+            set_editor_mode(editorState, MODE_EDIT_BUFFER);
+        } else {
+            set_editor_mode(editorState, MODE_GO_TO_LINE);
+        }
+        
+    }
+
     //NOTE: Ctrl F -> open buffer chooser
     if(global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown && global_platformInput.keyStates[PLATFORM_KEY_F].pressedCount > 0) 
     {
@@ -311,42 +322,24 @@ static void process_buffer_controller(EditorState *editorState, WL_Open_Buffer *
             set_editor_mode(editorState, MODE_FIND);
         }
         
+        //NOTE: Prefernce to mouse movement
         editorState->ui_state.use_mouse = true;
 
     }
 
-    //NOTE: Ctrl V -> paste text from clipboard
-    if(global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown && global_platformInput.keyStates[PLATFORM_KEY_V].pressedCount > 0) 
+    //NOTE: Ctrl A -> select all
+    if(global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown && global_platformInput.keyStates[PLATFORM_KEY_A].pressedCount > 0) 
     {
-        char *text_from_clipboard = platform_get_text_utf8_from_clipboard(&globalPerFrameArena);
-          
-        //NOTE: Any text added
-        addTextToBuffer(b, (char *)text_from_clipboard, b->cursorAt_inBytes);
-
-        if(open_buffer) {
-            open_buffer->is_up_to_date = false;
-            open_buffer->should_scroll_to = true;
-        }  
-
         end_select(selectable_state);
 
+        update_select(&open_buffer->selectable_state, 0);
+        update_select(&open_buffer->selectable_state, b->bufferSize_inUse_inBytes);
+
+        b->cursorAt_inBytes = b->bufferSize_inUse_inBytes;
+
+        open_buffer->should_scroll_to = true;
+
     }
-
-
-    //NOTE: Ctrl X -> cut text to clipboard
-    if(global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown && global_platformInput.keyStates[PLATFORM_KEY_X].pressedCount > 0) 
-    {
-        if(selectable_state->is_active) {
-            Selectable_Diff diff = selectable_get_bytes_diff(selectable_state);
-            platform_copy_text_utf8_to_clipboard((char *)(((u8 *)b->bufferMemory) + diff.start), diff.size);
-
-            remove_text_if_highlighted(selectable_state, b);
-
-        } else {
-            //NOTE: cut whole line
-        }
-    }
-
 
     //NOTE: Any text added if not pressing ctrl
     if(global_platformInput.textInput_utf8[0] != '\0' && !global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown) {
@@ -355,7 +348,11 @@ static void process_buffer_controller(EditorState *editorState, WL_Open_Buffer *
             char *at = (char *)global_platformInput.textInput_utf8;
             while(*at) {
                 assert(easyUnicode_isSingleByte(*at));
-                if(*at == '\n' || *at == '\r') {
+
+                //NOTE: If justNumber is set check that this is just numbers
+                bool numberCheck = (lexIsNumeric(*at) && justNumber) || !justNumber; 
+
+                if(*at == '\n' || *at == '\r' || !numberCheck) {
                     //NOTE: Move everything down one byte
                     char *temp = at;
                     while(*temp) {
@@ -391,79 +388,176 @@ static void process_buffer_controller(EditorState *editorState, WL_Open_Buffer *
             open_buffer->should_scroll_to = true;
         }
 
+         //NOTE: Ctrl X -> cut text to clipboard
+        if(global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown && command == PLATFORM_KEY_X) 
+        {   
+            if(selectable_state->is_active && selectable_state->start_offset_in_bytes < selectable_state->end_offset_in_bytes) {
+                Selectable_Diff diff = selectable_get_bytes_diff(selectable_state);
+                platform_copy_text_utf8_to_clipboard((char *)(((u8 *)b->bufferMemory) + diff.start), diff.size);
+
+                remove_text_if_highlighted(selectable_state, b);
+
+                end_select(selectable_state);
+
+            } else {
+                endGapBuffer(b);
+
+                //NOTE: cut whole line
+                size_t new_cursor_pos_inBytes_start = b->cursorAt_inBytes;
+
+                u8 *start = (u8 *)(b->bufferMemory + (b->cursorAt_inBytes)); 
+
+                while(start >= b->bufferMemory && start[0] != '\n') {
+                    new_cursor_pos_inBytes_start--;
+                    start--;
+                }
+
+                //NOTE: Move past the newline because we don't want to take it out
+                if(start[0] == '\n') { new_cursor_pos_inBytes_start++; }
+
+                size_t new_cursor_pos_inBytes_end = b->cursorAt_inBytes;
+
+                start = (u8 *)(b->bufferMemory + (b->cursorAt_inBytes)); 
+
+                while(start[0] != '\0' && start[0] != '\n') {
+                    new_cursor_pos_inBytes_end++;
+                    start++;
+                }
+
+                if(start[0] == '\n') { new_cursor_pos_inBytes_end++; }
+
+
+                removeTextFromBuffer(b, new_cursor_pos_inBytes_start, new_cursor_pos_inBytes_end - new_cursor_pos_inBytes_start);
+            }
+        }
+
+        //NOTE: Ctrl C -> cut text to clipboard
+        if(global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown  && command == PLATFORM_KEY_C) 
+        {
+            if(selectable_state->is_active) {
+                Selectable_Diff diff = selectable_get_bytes_diff(selectable_state);
+                platform_copy_text_utf8_to_clipboard((char *)(((u8 *)b->bufferMemory) + diff.start), diff.size);
+
+            } 
+        }
+
+            //NOTE: Ctrl V -> paste text from clipboard
+        if(global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown && command == PLATFORM_KEY_V) 
+        {
+            char *text_from_clipboard = platform_get_text_utf8_from_clipboard(&globalPerFrameArena);
+            
+            //NOTE: Any text added
+            addTextToBuffer(b, (char *)text_from_clipboard, b->cursorAt_inBytes);
+
+            if(open_buffer) {
+                open_buffer->is_up_to_date = false;
+                open_buffer->should_scroll_to = true;
+            }  
+
+            end_select(selectable_state);
+
+        }
+
         //NOTE: UNDO REDO commands 
         if(option == BUFFER_ALL) {
-            UndoRedoBlock *block = NULL;
-            bool isRedo = true;
 
-            //NOTE: Ctrl Z -> undo operation
-            if(global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown && command == PLATFORM_KEY_Z) 
-            {   
-                isRedo = false;
-                block = get_undo_block(&b->undo_redo_state);
-            }
+            //NOTE: Loop this if undo commands are in a group
+            bool hasBlocks = true;
+            s32 startGroupId = -1;
+            while(hasBlocks) {
 
-            //NOTE: Ctrl Y -> redo operation
-            if(global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown && command == PLATFORM_KEY_Y) 
-            {
-                block = get_redo_block(&b->undo_redo_state);
-            }
+                UndoRedoBlock *block = NULL;
+                bool isRedo = true;
 
-            if(block) {
+                //NOTE: Ctrl Z -> undo operation
+                if(global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown && command == PLATFORM_KEY_Z) 
+                {   
+                    isRedo = false;
+                    UndoRedoBlock *nextBlock = see_undo_block(&b->undo_redo_state);
 
-                block->byteAt;
-                block->string;
-                block->stringLength;
-
-                bool shouldInsert = true;
-
-                UndoRedo_BlockType commandType = block->type;
-
-                if(!isRedo) {
-                    //NOTE: Reverse the command on the buffer block
-                    if(commandType == UNDO_REDO_INSERT) {
-                        commandType = UNDO_REDO_DELETE;
-                    } else {
-                        assert(commandType == UNDO_REDO_DELETE);
-                        commandType = UNDO_REDO_INSERT;
-                    }
-                } 
-
-                if(open_buffer) {
-                    open_buffer->moveVertical_xPos = -1;
-
-                    assert(block->id > 0);
-
-                    u32 id_to_check = (isRedo) ? block->id : (block->id -1);
-
-                    //NOTE: Check if it is up to date based on the id we saved at
-                    if(open_buffer->current_save_undo_redo_id == id_to_check) {
-                        open_buffer->is_up_to_date = true;
-                    } else {
-                        open_buffer->is_up_to_date = false;
+                    //NOTE: If there are any blocks to get, is part of this group or is not in a group or starting a group
+                    if(nextBlock && (nextBlock->groupId == startGroupId || nextBlock->groupId < 0 || (nextBlock->groupId >= 0 && startGroupId < 0))) {
+                        block = get_undo_block(&b->undo_redo_state);
                     }
                     
-                    open_buffer->should_scroll_to = true;
-                    end_select(selectable_state);
-                }   
-
-                if(block->byteAt != b->cursorAt_inBytes) {
-                    endGapBuffer(b);
                 }
 
-                if(commandType == UNDO_REDO_INSERT) { //NOTE: Insert
+                //NOTE: Ctrl Y -> redo operation
+                if(global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown && command == PLATFORM_KEY_Y) 
+                {
+                    UndoRedoBlock *nextBlock = see_redo_block(&b->undo_redo_state);
+
+                    if(nextBlock && (nextBlock->groupId == startGroupId || nextBlock->groupId < 0 || (nextBlock->groupId >= 0 && startGroupId < 0))) {
+                        block = get_redo_block(&b->undo_redo_state);
+                    }
+                }
+
+                if(block) {
+
+                    if(startGroupId < 0) {
+                        //NOTE: Initilise the start group id
+                        startGroupId = block->groupId;
+                    }
+
+                    bool shouldInsert = true;
+
+                    UndoRedo_BlockType commandType = block->type;
+
+                    if(!isRedo) {
+                        //NOTE: Reverse the command on the buffer block
+                        if(commandType == UNDO_REDO_INSERT) {
+                            commandType = UNDO_REDO_DELETE;
+                        } else {
+                            assert(commandType == UNDO_REDO_DELETE);
+                            commandType = UNDO_REDO_INSERT;
+                        }
+                    } 
+
+                    //NOTE: Check if buffer is in a saved state based on the new undo state 
+                    if(open_buffer) {
+                        open_buffer->moveVertical_xPos = -1;
+
+                        assert(block->id > 0);
+
+                        u32 id_to_check = (isRedo) ? block->id : (block->id -1);
+
+                        //NOTE: Check if it is up to date based on the id we saved at
+                        if(open_buffer->current_save_undo_redo_id == id_to_check) {
+                            open_buffer->is_up_to_date = true;
+                        } else {
+                            open_buffer->is_up_to_date = false;
+                        }
+                        
+                        open_buffer->should_scroll_to = true;
+                        end_select(selectable_state);
+                    }   
+
+                    if(block->byteAt != b->cursorAt_inBytes) {
+                        endGapBuffer(b);
+                    }
+
+                    if(commandType == UNDO_REDO_INSERT) { //NOTE: Insert
+                        addTextToBuffer(b, block->string, block->byteAt, false);
+                    } else {
+                        assert(commandType == UNDO_REDO_DELETE); //NOTE: Delete
                     
-                    addTextToBuffer(b, block->string, block->byteAt, false);
+                        removeTextFromBuffer(b, block->byteAt, block->stringLength, false);
+
+                    }
+
+                    //NOTE: See if this block is part of the groupId or is a single command
+                    if(block->groupId < 0) {
+                        hasBlocks = false;
+                    }
                 } else {
-                    assert(commandType == UNDO_REDO_DELETE); //NOTE: Delete
-                
-                    removeTextFromBuffer(b, block->byteAt, block->stringLength, false);
-
+                    //NOTE: If we don't have any more blocks left, get out of the loop
+                    hasBlocks = false;
                 }
-
                 open_buffer->should_scroll_to = true;
+
+                //NOTE: For testing
+                hasBlocks = false;
             }
-            
         }
 
         if(command == PLATFORM_KEY_BACKSPACE && b->cursorAt_inBytes > 0) {
@@ -498,7 +592,7 @@ static void process_buffer_controller(EditorState *editorState, WL_Open_Buffer *
                 open_buffer->moveVertical_xPos = -1;
             }
             
-            u32 bytesOfPrevRune = size_of_last_utf8_codepoint_in_bytes((char *)&b->bufferMemory[b->cursorAt_inBytes], b->cursorAt_inBytes);
+            u32 bytesOfPrevRune = 1;//size_of_last_utf8_codepoint_in_bytes((char *)&b->bufferMemory[b->cursorAt_inBytes], b->cursorAt_inBytes);
 
             if(global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown) {
                 EasyToken token = peekTokenBackwards_tokenNotComplete((char *)(b->bufferMemory + (b->cursorAt_inBytes - 1)), (char *)b->bufferMemory);

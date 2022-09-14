@@ -1,5 +1,6 @@
 //NOTE: This is what stores the selectable text
 struct Selectable_State {
+	//TODO: This should be size_t values 
 	s32 start_offset_in_bytes;
 	s32 end_offset_in_bytes;
 
