@@ -79,45 +79,8 @@ static void makeGapBuffer_(WL_Buffer *b, int byteStart, int gapSize) {
 	b->gapBuffer_endAt = b->gapBuffer_startAt + gapSize; 
 
 	b->bufferSize_inUse_inBytes += gapSize;
-
-	
-
 }
 
-static void addTextToBuffer(WL_Buffer *b, char *str, int indexStart, bool should_add_to_history = true, s32 groupId = -1) {
-
-#if !DEBUG_BUILD
-	if(indexStart != b->cursorAt_inBytes) {
-		endGapBuffer(b);
-	}
-#endif
-
-	u32 strSize_inBytes = easyString_getSizeInBytes_utf8(str); 
-
-	if(strSize_inBytes > 0) {
-
-		if(should_add_to_history) {
-			push_block(&b->undo_redo_state, UNDO_REDO_INSERT, b->cursorAt_inBytes, nullTerminate(str, strSize_inBytes), strSize_inBytes, b->cursorAt_inBytes, groupId);
-		}
-		
-		int gapBufferSize = (int)b->gapBuffer_endAt - (int)b->gapBuffer_startAt;
-
-		if(gapBufferSize < strSize_inBytes) {
-			//NOTE: Make gap buffer bigger
-			makeGapBuffer_(b, indexStart, max(strSize_inBytes, GAP_BUFFER_SIZE_IN_BYTES));
-			assert((b->gapBuffer_endAt - b->gapBuffer_startAt) >= strSize_inBytes);
-		}
-
-		//NOTE: Now add the string to the buffer
-		for(int i = 0; i < strSize_inBytes; ++i) {
-			b->bufferMemory[b->gapBuffer_startAt + i] = str[i];
-			assert(b->gapBuffer_startAt + i < b->gapBuffer_endAt);
-		}
-
-		b->gapBuffer_startAt += strSize_inBytes;
-		b->cursorAt_inBytes = indexStart + strSize_inBytes;
-	}
-}
 
 //NOTE: We end the gap buffer whenever we move the cursor
 static void endGapBuffer(WL_Buffer *b) {
@@ -143,13 +106,47 @@ static void endGapBuffer(WL_Buffer *b) {
 }
 
 
+static void addTextToBuffer(WL_Buffer *b, char *str, int indexStart, bool should_add_to_history = true, s32 groupId = -1) {
+
+	//NOTE: Always make sure we end any gap buffers
+	if(indexStart != b->cursorAt_inBytes) {
+		endGapBuffer(b);
+	}
+
+	u32 strSize_inBytes = easyString_getSizeInBytes_utf8(str); 
+
+	if(strSize_inBytes > 0) {
+
+		if(should_add_to_history) {
+			push_block(&b->undo_redo_state, UNDO_REDO_INSERT, b->cursorAt_inBytes, nullTerminate(str, strSize_inBytes), strSize_inBytes, b->cursorAt_inBytes, groupId);
+		}
+		
+		int gapBufferSize = (int)b->gapBuffer_endAt - (int)b->gapBuffer_startAt;
+
+		if(gapBufferSize < strSize_inBytes) {
+			//NOTE: Make gap buffer bigger
+			makeGapBuffer_(b, indexStart, max(strSize_inBytes, 0)); //GAP_BUFFER_SIZE_IN_BYTES
+			assert((b->gapBuffer_endAt - b->gapBuffer_startAt) >= strSize_inBytes);
+		}
+
+		//NOTE: Now add the string to the buffer
+		for(int i = 0; i < strSize_inBytes; ++i) {
+			b->bufferMemory[b->gapBuffer_startAt + i] = str[i];
+			assert(b->gapBuffer_startAt + i < b->gapBuffer_endAt);
+		}
+
+		b->gapBuffer_startAt += strSize_inBytes;
+		b->cursorAt_inBytes = indexStart + strSize_inBytes;
+		
+	}
+}
+
+
 static void removeTextFromBuffer(WL_Buffer *b, int bytesStart, int toRemoveCount_inBytes, bool should_add_to_history = true, s32 groupId = -1) {
 	
-#if !DEBUG_BUILD
 	if(bytesStart != b->cursorAt_inBytes) {
 		endGapBuffer(b);
 	}
-#endif
 
 	//NOTE: See if has an active gap
 	int gapDiff = b->gapBuffer_endAt - b->gapBuffer_startAt;

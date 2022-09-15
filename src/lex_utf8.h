@@ -844,6 +844,12 @@ EasyToken lexGetToken_(EasyTokenizer *tokenizer, bool advanceWithToken) {
                     
                 if(easyString_stringsMatch_null_and_count("new", token.at, token.size)) {
                     token.type = TOKEN_NEW_KEYWORD;
+                } else if(easyString_stringsMatch_null_and_count("enum", token.at, token.size)) {
+                    token.type = TOKEN_NEW_KEYWORD;
+                } else if(easyString_stringsMatch_null_and_count("static", token.at, token.size)) {
+                    token.type = TOKEN_NEW_KEYWORD;
+                } else if(easyString_stringsMatch_null_and_count("inline", token.at, token.size)) {
+                    token.type = TOKEN_NEW_KEYWORD;
                 } else if(easyString_stringsMatch_null_and_count("for", token.at, token.size)) {
                     token.type = TOKEN_FOR_KEYWORD;
                 } else if(easyString_stringsMatch_null_and_count("else", token.at, token.size)) {

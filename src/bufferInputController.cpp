@@ -26,7 +26,7 @@ static bool optionCanMoveDown(BufferControllerOption option) {
     }
 }
 
-static void updateNewCursorPos(EditorState *editorState, WL_Buffer *b, int new_cursor_pos_inBytes, Selectable_State *selectable_state) {
+static void updateNewCursorPos(WL_Buffer *b, int new_cursor_pos_inBytes, Selectable_State *selectable_state) {
 	if(new_cursor_pos_inBytes >= 0){ //is valid move
 		if(global_platformInput.keyStates[PLATFORM_KEY_SHIFT].isDown) 
 		{
@@ -47,7 +47,7 @@ static void updateNewCursorPos(EditorState *editorState, WL_Buffer *b, int new_c
 	}
 }
 
-static int getCursorPosAtStartOfLine(EditorState *editorState, WL_Buffer *b) {
+static int getCursorPosAtStartOfLine(WL_Buffer *b) {
 	u8 *start = (u8 *)(b->bufferMemory + (b->cursorAt_inBytes)); 
 	u8 *at = start;
 
@@ -69,7 +69,7 @@ static int getCursorPosAtStartOfLine(EditorState *editorState, WL_Buffer *b) {
 
 }
 
-static int getCursorPosAtEndOfLine(EditorState *editorState, WL_Buffer *b) {
+static int getCursorPosAtEndOfLine(WL_Buffer *b) {
 	u8 *start = (u8 *)(b->bufferMemory + (b->cursorAt_inBytes)); 
 	u8 *at = start;
 
@@ -86,7 +86,7 @@ static int getCursorPosAtEndOfLine(EditorState *editorState, WL_Buffer *b) {
 	return result;
 }
 
-static float getXposAtInLine(EditorState *editorState, WL_Buffer *b, Font *font, float fontScale) {
+static float getXposAtInLine(WL_Buffer *b, Font *font, float fontScale) {
 	u8 *start = (u8 *)(b->bufferMemory + (b->cursorAt_inBytes)); 
 	u8 *at = start;
 
@@ -124,7 +124,7 @@ static float getXposAtInLine(EditorState *editorState, WL_Buffer *b, Font *font,
 	return xAt;
 }
 
-static int getCusorPosLineBelow(EditorState *editorState, WL_Buffer *b, Font *font, float fontScale, WL_Open_Buffer *open_buffer) {
+static int getCusorPosLineBelow(WL_Buffer *b, Font *font, float fontScale, WL_Open_Buffer *open_buffer) {
 	int new_cursor_pos_inBytes = -1; //-1 not valid move
 
 	u8 *at =  b->bufferMemory + b->cursorAt_inBytes;
@@ -343,6 +343,11 @@ static void process_buffer_controller(EditorState *editorState, WL_Open_Buffer *
 
     //NOTE: Any text added if not pressing ctrl
     if(global_platformInput.textInput_utf8[0] != '\0' && !global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown) {
+
+        if(open_buffer) {
+            open_buffer->cursor_blink_time = 0.0f;
+        }
+        
         if(option == BUFFER_SIMPLE) {
             //NOTE: Don't add new lines to SIMPLE buffers
             char *at = (char *)global_platformInput.textInput_utf8;
@@ -386,6 +391,7 @@ static void process_buffer_controller(EditorState *editorState, WL_Open_Buffer *
 
         if(open_buffer) {
             open_buffer->should_scroll_to = true;
+            open_buffer->cursor_blink_time = 0.0f;
         }
 
          //NOTE: Ctrl X -> cut text to clipboard
@@ -684,17 +690,17 @@ static void process_buffer_controller(EditorState *editorState, WL_Open_Buffer *
             endGapBuffer(b);
 
             
-            int new_cursor_pos_inBytes = getCursorPosAtEndOfLine(editorState, b);
+            int new_cursor_pos_inBytes = getCursorPosAtEndOfLine(b);
 
             
-            updateNewCursorPos(editorState, b, new_cursor_pos_inBytes, selectable_state);
+            updateNewCursorPos(b, new_cursor_pos_inBytes, selectable_state);
         }  
 
         if(command == PLATFORM_KEY_HOME) {
 
             endGapBuffer(b);
-            int new_cursor_pos_inBytes = getCursorPosAtStartOfLine(editorState, b);
-            updateNewCursorPos(editorState, b, new_cursor_pos_inBytes, selectable_state);
+            int new_cursor_pos_inBytes = getCursorPosAtStartOfLine(b);
+            updateNewCursorPos( b, new_cursor_pos_inBytes, selectable_state);
             
             
         }  
@@ -705,28 +711,28 @@ static void process_buffer_controller(EditorState *editorState, WL_Open_Buffer *
 
             endGapBuffer(b);
 
-            if(editorState->moveVertical_xPos < 0) {
-                editorState->moveVertical_xPos = getXposAtInLine(editorState, b, &editorState->font, editorState->fontScale);
+            if(open_buffer->moveVertical_xPos < 0) {
+                open_buffer->moveVertical_xPos = getXposAtInLine(b, &editorState->font, editorState->fontScale);
             }
 
-            assert(editorState->moveVertical_xPos  >= 0);
+            assert(open_buffer->moveVertical_xPos  >= 0);
             int new_cursor_pos_inBytes = getCusorPosLineAbove(editorState, b, &editorState->font, editorState->fontScale, open_buffer);
             
-            updateNewCursorPos(editorState, b, new_cursor_pos_inBytes, selectable_state);
+            updateNewCursorPos(b, new_cursor_pos_inBytes, selectable_state);
         }  
 
         if(command == PLATFORM_KEY_DOWN && optionCanMoveDown(option)) {
             assert(open_buffer);//NOTE: Must have an open buffer to do this option
             endGapBuffer(b);
 
-            if(editorState->moveVertical_xPos < 0) {
-                editorState->moveVertical_xPos = getXposAtInLine(editorState, b, &editorState->font, editorState->fontScale);
+            if(open_buffer->moveVertical_xPos < 0) {
+                open_buffer->moveVertical_xPos = getXposAtInLine(b, &editorState->font, editorState->fontScale);
             }
 
-            assert(editorState->moveVertical_xPos  >= 0);
-            int new_cursor_pos_inBytes = getCusorPosLineBelow(editorState, b, &editorState->font, editorState->fontScale, open_buffer);
+            assert(open_buffer->moveVertical_xPos  >= 0);
+            int new_cursor_pos_inBytes = getCusorPosLineBelow(b, &editorState->font, editorState->fontScale, open_buffer);
 
-            updateNewCursorPos(editorState, b, new_cursor_pos_inBytes, selectable_state);				   	
+            updateNewCursorPos(b, new_cursor_pos_inBytes, selectable_state);				   	
         }      
     }
 }

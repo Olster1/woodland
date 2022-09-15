@@ -41,10 +41,18 @@ typedef enum {
 	MODE_GO_TO_LINE,
 } EditorMode;
 
+enum Open_Buffer_Type {
+	OPEN_BUFFER_TEXT_EDITOR,
+	OPEN_BUFFER_PROJECT_TREE,
+
+};
+
 typedef struct {
 	char *name;
 	char *file_name_utf8;
 	bool is_up_to_date;
+
+	Open_Buffer_Type type;
 
 	//NOTE: We have both of these since threads can change the current time stamp. 
 	//		THen it is up to the main thread to update the buffer accordingly
@@ -55,6 +63,8 @@ typedef struct {
 	float2 scroll_target_pos; //NOTE: Velocity of our scrolling
 	float2 scroll_dp;
 	bool should_scroll_to;
+
+	float cursor_blink_time;
 
 	float2 max_scroll_bounds;
 
@@ -101,6 +111,7 @@ typedef struct {
 	Font font;
 
 	Editor_Color_Palette color_palette;
+	Color_Palettes color_palettes;
 
 	float fontScale;
 
@@ -111,8 +122,6 @@ typedef struct {
 	Settings_To_Save settings_to_save;
 
 	char *save_file_location_utf8;
-
-	float moveVertical_xPos;
 
 	int selectionIndex_forDropDown;
 	
@@ -278,7 +287,7 @@ void drawAndUpdateBufferSelection(EditorState *editorState, Renderer *renderer, 
 	}
 }
 
-
+#include "wl_project_tree.cpp"
 #include "wl_window.cpp"
 
 static bool has_utf8_BOM(u8 *txt) {
@@ -409,10 +418,13 @@ static WL_Open_Buffer *open_file_and_add_to_window(EditorState *editorState, cha
 
 		b->cursorAt_inBytes = 0;
 
-		open_buffer->file_name_utf8 = (char *)platform_wide_char_to_utf8_allocates_on_heap(file_name_wide_char);
-		open_buffer->name = getFileLastPortion(open_buffer->file_name_utf8);
 		open_buffer->is_up_to_date = true;
 		open_buffer->current_time_stamp = open_buffer->last_time_stamp = timeStamp;
+
+		open_buffer->file_name_utf8 = (char *)platform_wide_char_to_utf8_allocates_on_heap(file_name_wide_char);
+		open_buffer->name = getFileLastPortion(open_buffer->file_name_utf8);
+
+		open_buffer->type = OPEN_BUFFER_TEXT_EDITOR;
 
 		platform_free_memory(data);
 
@@ -513,16 +525,8 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 
 		editorState->wrap_text_width = -100; //NOTE: Infinity to turn it off to avoid an extra if statement? 
 
-		{
-			editorState->color_palette.background = color_hexARGBTo01(0xFF161616);
-			editorState->color_palette.standard =  color_hexARGBTo01(0xFFA08563);
-			editorState->color_palette.variable = color_hexARGBTo01(0xFF6B8E23);
-			editorState->color_palette.bracket = color_hexARGBTo01(0xFFDAB98F);
-			editorState->color_palette.function = color_hexARGBTo01(0xFF008563);
-			editorState->color_palette.keyword = color_hexARGBTo01(0xFFCD950C);
-			editorState->color_palette.comment = color_hexARGBTo01(0xFF7D7D7D);
-			editorState->color_palette.preprocessor = color_hexARGBTo01(0xFFDAB98F);
-		}
+		editorState->color_palettes = init_color_palettes();
+		editorState->color_palette = editorState->color_palettes.handmade;
 
 #if DEBUG_BUILD
 		DEBUG_runUnitTestForLookBackTokens();
@@ -739,7 +743,6 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 				}
 			}
 
-			//NOTE: Update the active buffer
 			{	
 
 				//NOTE: Check if the user scrolled, if so stop trying to target a cursor position
@@ -770,8 +773,11 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 					open_buffer->scroll_dp.x *= drag;
 					open_buffer->scroll_dp.y *= drag;
 				}
-				
-				process_buffer_controller(editorState, open_buffer, b, BUFFER_ALL, &open_buffer->selectable_state);
+
+				//NOTE: Only enter text if it is an open buffer
+				if(open_buffer->type == OPEN_BUFFER_TEXT_EDITOR) {
+					process_buffer_controller(editorState, open_buffer, b, BUFFER_ALL, &open_buffer->selectable_state);
+				}
 			}
 		} break;
 		case MODE_GO_TO_LINE: {
@@ -1042,7 +1048,8 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 
 		bool is_active = (i == editorState->active_window_index);
 
-		draw_wl_window(editorState, w, renderer, is_active, windowWidth, windowHeight, editorState->font, editorState->color_palette.standard, editorState->fontScale, i, mouse_point_top_left_origin);
+		
+		draw_wl_window(editorState, w, renderer, is_active, windowWidth, windowHeight, editorState->font, editorState->color_palette.standard, editorState->fontScale, i, mouse_point_top_left_origin, dt);
 
 	}
 
