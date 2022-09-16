@@ -577,6 +577,8 @@ static void process_buffer_controller(EditorState *editorState, WL_Open_Buffer *
                 remove_text_if_highlighted(selectable_state, b);
             } else {
                 u32 bytesOfPrevRune = size_of_last_utf8_codepoint_in_bytes((char *)&b->bufferMemory[b->cursorAt_inBytes], b->cursorAt_inBytes);
+                assert(bytesOfPrevRune == 1 || bytesOfPrevRune == 0);
+                
                 startByte = b->cursorAt_inBytes - bytesOfPrevRune;
                 totalBytes = bytesOfPrevRune;
                 removeTextFromBuffer(b, startByte, totalBytes);
@@ -598,7 +600,9 @@ static void process_buffer_controller(EditorState *editorState, WL_Open_Buffer *
                 open_buffer->moveVertical_xPos = -1;
             }
             
-            u32 bytesOfPrevRune = 1;//size_of_last_utf8_codepoint_in_bytes((char *)&b->bufferMemory[b->cursorAt_inBytes], b->cursorAt_inBytes);
+            u32 bytesOfPrevRune = size_of_last_utf8_codepoint_in_bytes((char *)&b->bufferMemory[b->cursorAt_inBytes], b->cursorAt_inBytes);
+            
+            assert(bytesOfPrevRune == 1 || bytesOfPrevRune == 0);
 
             if(global_platformInput.keyStates[PLATFORM_KEY_CTRL].isDown) {
                 EasyToken token = peekTokenBackwards_tokenNotComplete((char *)(b->bufferMemory + (b->cursorAt_inBytes - 1)), (char *)b->bufferMemory);
@@ -640,7 +644,7 @@ static void process_buffer_controller(EditorState *editorState, WL_Open_Buffer *
         if(command == PLATFORM_KEY_RIGHT) {
 
             u32 bytesOfNextRune = size_of_next_utf8_codepoint_in_bytes((char *)&b->bufferMemory[b->cursorAt_inBytes]);
-
+            assert(bytesOfNextRune == 1 || bytesOfNextRune == 0);
             endGapBuffer(b);
 
             if(open_buffer) {

@@ -133,7 +133,7 @@ typedef struct {
 
 	float line_spacing;
 
-	float wrap_text_width; //NOTE: Negative number to turn wrap text off
+	bool should_wrap_text; //NOTE: wrap text in window
 
 } EditorState;
 
@@ -523,7 +523,7 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 
 		editorState->line_spacing = 1.2f; //NOTE: How big it is between lines
 
-		editorState->wrap_text_width = -100; //NOTE: Infinity to turn it off to avoid an extra if statement? 
+		editorState->should_wrap_text = true;
 
 		editorState->color_palettes = init_color_palettes();
 		editorState->color_palette = editorState->color_palettes.handmade;

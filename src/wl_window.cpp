@@ -46,6 +46,23 @@ static DoubleClickWordResult isDoubleClickInWord(size_t memory_offset, char *tex
 	return result;
 }
 
+//NOTE: This got pulled out of the main funciton becuase this needs to be run twice, one in the main loop and one if we get a null terminator  
+static void check_if_clicking_of_dragging_nearby(size_t memory_offset, bool tried_clicking, bool mouseIsDown, float xAt, float yAt, float2 mouse_point_top_left_origin, float2 *closest_click_distance, size_t *closest_click_buffer_point) {
+	if(tried_clicking || mouseIsDown) {
+		float2 distance = make_float2(xAt - mouse_point_top_left_origin.x, get_abs_value(yAt) - mouse_point_top_left_origin.y); 
+		distance.x = get_abs_value(distance.x);
+		distance.y = get_abs_value(distance.y);
+		//NOTE: We test the y distance first since we want to give preference to lines
+		if(distance.y <= closest_click_distance->y) {
+			bool differentLine = distance.y < closest_click_distance->y;
+			if(distance.x <= closest_click_distance->x || differentLine) {
+				*closest_click_distance = distance;
+				*closest_click_buffer_point = memory_offset;
+			}
+		} 
+	}
+}
+
 static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *renderer, bool is_active, float windowWidth, float windowHeight, Font font, float4 font_color, float fontScale, int window_index, float2 mouse_point_top_left_origin, float dt) {
 	WL_Open_Buffer *open_buffer = &editorState->buffers_loaded[w->buffer_index];
 
@@ -222,14 +239,17 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 		bool mouseIsDown = open_buffer->selectable_state.is_active && editorState->mode_ == MODE_EDIT_BUFFER && !has_active_interaction(&editorState->ui_state) && (global_platformInput.keyStates[PLATFORM_MOUSE_LEFT_BUTTON].isDown && global_platformInput.keyStates[PLATFORM_MOUSE_LEFT_BUTTON].pressedCount == 0);
 
 		while(parsing) {
-			bool renderToken = true;
+			bool isNotNullTerminator = true;
 
 			EasyToken token = lexGetNextToken(&tokenizer);
 
 			if(token.type == TOKEN_NULL_TERMINATOR) {
 				memory_offset = (s32)((char *)token.at - (char *)buffer_to_draw.memory); 
+
+				check_if_clicking_of_dragging_nearby(memory_offset, tried_clicking, mouseIsDown, xAt, yAt, mouse_point_top_left_origin, &closest_click_distance, &closest_click_buffer_point);
+
 				parsing = false;
-				renderToken = false;
+				isNotNullTerminator = false;
 				break;
 			}
 
@@ -254,18 +274,11 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 
 			char *at = token.at;
 			char *start_token = token.at;
-			while((at - start_token) < token.size && renderToken) {
+			while((at - start_token) < token.size && isNotNullTerminator) {
 
 				memory_offset = (s32)((char *)at - (char *)buffer_to_draw.memory); 
 
 				u32 rune = easyUnicode_utf8_codepoint_To_Utf32_codepoint(&((char *)at), true);
-
-				//NOTE: DEBUG PURPOSES
-				// GlyphInfo g = easyFont_getGlyph(&font, rune);
-				// char string[256];
-		//       sprintf(string, "%c: %d\n", rune, g.hasTexture);
-
-		//       OutputDebugStringA((char *)string);
 
 				//NOTE: For scaling tabs glyphs
 				float factor = 1.0f;
@@ -274,19 +287,7 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 					drawing = true;
 
 
-					if(tried_clicking || mouseIsDown) {
-						float2 distance = make_float2(xAt - mouse_point_top_left_origin.x, get_abs_value(yAt) - mouse_point_top_left_origin.y); 
-						distance.x = get_abs_value(distance.x);
-						distance.y = get_abs_value(distance.y);
-						//NOTE: We test the y distance first since we want to give preference to lines
-						if(distance.y <= closest_click_distance.y) {
-							bool differentLine = distance.y < closest_click_distance.y;
-							if(distance.x <= closest_click_distance.x || differentLine) {
-								closest_click_distance = distance;
-								closest_click_buffer_point = memory_offset;
-							}
-						} 
-					}
+					check_if_clicking_of_dragging_nearby(memory_offset, tried_clicking, mouseIsDown, xAt, yAt, mouse_point_top_left_origin, &closest_click_distance, &closest_click_buffer_point);
 
 				} else {
 					drawing = false;
@@ -314,7 +315,7 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 				}
 
 
-				if(rune == '\n' || rune == '\r' || (editorState->wrap_text_width >= 0 && xAt > windowWidth)) {
+				if(rune == '\n' || rune == '\r' || (editorState->should_wrap_text && xAt > window_bounds.maxX)) {
 					yAt -= newLineIncrement;
 					xAt = startX;
 
@@ -339,7 +340,7 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 						drawing = false;
 					}
 					
-				} else if(drawing) {
+				} else {
 
 					bool wasTabRune = false;
 					if(rune == '\t') {
@@ -360,7 +361,7 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 					// sprintf(buffer, "%d\n", g.unicodePoint);
 					// OutputDebugStringA(buffer);
 
-					{
+					if(drawing) {
 						float2 scale = make_float2(g.width*fontScale, g.height*fontScale);
 
 						float offsetY = -0.5f*scale.y;
@@ -396,28 +397,29 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 							
 							pushGlyph(renderer, g.handle, pos, scale, text_color, g.uvCoords);
 						}
-					}
 
-					{
-						if(search_query) {
-							//NOTE: Draw the highlighted search results
-							if(searchBufferAt < search_query->byteOffsetCount && isInSearchArray(memory_offset, search_query)) {
-								//NOTE: Push the outline of the box, we don't draw it since we want to batch the draw calls together
-								rectsToDraw_forSearch[searchBufferAt] = make_float2(xAt + fontScale*g.xoffset, yAt);
-								searchBufferAt++;
-								
+						{
+							if(search_query) {
+								//NOTE: Draw the highlighted search results
+								if(searchBufferAt < search_query->byteOffsetCount && isInSearchArray(memory_offset, search_query)) {
+									//NOTE: Push the outline of the box, we don't draw it since we want to batch the draw calls together
+									rectsToDraw_forSearch[searchBufferAt] = make_float2(xAt + fontScale*g.xoffset, yAt);
+									searchBufferAt++;
+									
+								}
 							}
-						}
 					
-					}
+						}
+					} //NOTE: if(drawing) block
 
 					
+					//NOTE: For drawing and not drawing glyphs we need to find out wide we are for the wrap text
 					xAt += (g.width + g.xoffset)*fontScale*factor;
 
-					if((xAt) > max_x) {
+					//NOTE: Only check this if we are actually drawing 
+					if(drawing && (xAt) > max_x) {
 						max_x = xAt;
 					}
-
 				}
 			}
 		}
@@ -461,6 +463,10 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 				if(closest_click_distance.x != FLT_MAX) { //NOTE: See if this is a valid position 
 					endGapBuffer(b);
 					b->cursorAt_inBytes = closest_click_buffer_point;
+
+					//NOTE: Reset the blink rate
+					open_buffer->cursor_blink_time = 0.0f;
+
 					end_select(&open_buffer->selectable_state);
 
 					//NOTE: User double clicked on a glyph, so see if clicked a word
@@ -485,6 +491,7 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 				}
 			}
 
+			//NOTE: Drag select
 			if(mouseIsDown && open_buffer->selectable_state.is_active) {
 				endGapBuffer(b);
 				b->cursorAt_inBytes = closest_click_buffer_point;
