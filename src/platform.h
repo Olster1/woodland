@@ -102,6 +102,22 @@ struct PlatformKeyState {
     int releasedCount;
 };
 
+//NOTE: This can be a file or a folder and can have children if it's a folder
+struct Platform_Directory_Item {
+
+    u8 *item_name_utf8_null_terminated;
+    bool is_folder;
+
+    Platform_Directory_Item *next;
+    Platform_Directory_Item *child;
+};
+
+struct Platform_Directory_Tree {
+    //NOTE: The start of the tree
+    Platform_Directory_Item *parent;
+
+};
+
 #define PLATFORM_MAX_TEXT_BUFFER_SIZE_IN_BYTES 256
 #define PLATFORM_MAX_KEY_INPUT_BUFFER 16
 

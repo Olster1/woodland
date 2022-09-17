@@ -1,22 +1,6 @@
 #include "wl_memory.h"
 #include "file_helper.cpp"
 
-inline char *easy_createString_printf(Memory_Arena *arena, char *formatString, ...) {
-
-    va_list args;
-    va_start(args, formatString);
- 
-    char bogus[1];
-    int stringLengthToAlloc = vsnprintf(bogus, 1, formatString, args) + 1; //for null terminator, just to be sure
-    
-    char *strArray = pushArray(arena, stringLengthToAlloc, char);
-
-    vsnprintf(strArray, stringLengthToAlloc, formatString, args); 
-
-    va_end(args);
-
-    return strArray;
-}
 
 #include "lex_utf8.h"
 #include "color.cpp"
@@ -134,6 +118,11 @@ typedef struct {
 	float line_spacing;
 
 	bool should_wrap_text; //NOTE: wrap text in window
+
+	//NOTE: If a project is loaded i.e. tried to open a folder name
+	//		This get's filled out and is used in the OPEN_BUFFER_PROJECT_TREE window to draw the
+	//		project directory
+	Platform_Directory_Tree project_tree;
 
 } EditorState;
 
@@ -421,7 +410,7 @@ static WL_Open_Buffer *open_file_and_add_to_window(EditorState *editorState, cha
 		open_buffer->is_up_to_date = true;
 		open_buffer->current_time_stamp = open_buffer->last_time_stamp = timeStamp;
 
-		open_buffer->file_name_utf8 = (char *)platform_wide_char_to_utf8_allocates_on_heap(file_name_wide_char);
+		open_buffer->file_name_utf8 = (char *)platform_wide_char_to_utf8_null_terminate(file_name_wide_char, 0);
 		open_buffer->name = getFileLastPortion(open_buffer->file_name_utf8);
 
 		open_buffer->type = OPEN_BUFFER_TEXT_EDITOR;
@@ -521,9 +510,19 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
  		
 		editorState->ui_state.id.id = -1;
 
+		//TODO: Can change in a config file
 		editorState->line_spacing = 1.2f; //NOTE: How big it is between lines
 
+		//TODO: Can toggle in a config file
 		editorState->should_wrap_text = true;
+		
+		editorState->project_tree.parent = 0;
+
+		Platform_Directory_Tree tree = {};
+
+		tree.parent = platform_build_tree_of_directory("C:\\Users\\olive\\Documents\\fantasy_game\\engine", &global_long_term_arena);
+
+		
 
 		editorState->color_palettes = init_color_palettes();
 		editorState->color_palette = editorState->color_palettes.handmade;
@@ -669,7 +668,7 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 			u16 *fileNameToOpen_utf16 = (u16 *)Platform_SaveFile_withDialog_wideChar(&globalPerFrameArena);
 
 			if(fileNameToOpen_utf16) {
-				open_buffer->file_name_utf8 = (char *)platform_wide_char_to_utf8_allocates_on_heap(fileNameToOpen_utf16);
+				open_buffer->file_name_utf8 = (char *)platform_wide_char_to_utf8_null_terminate(fileNameToOpen_utf16, 0);
 			}
 
 			

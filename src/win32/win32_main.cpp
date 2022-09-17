@@ -615,7 +615,9 @@ static void *Platform_SaveFile_withDialog_wideChar(Memory_Arena *arena) {
     return path;
 }
 
-static void *platform_wide_char_to_utf8_allocates_on_heap(void *win32_wideString_utf16) {
+//NOTE: This null terminates the string
+static u8 *platform_wide_char_to_utf8_null_terminate(void *win32_wideString_utf16, Memory_Arena *arena = 0) {
+    //NOTE: If arena is null, allocate on heap
 
     u8 *result = 0;
 
@@ -630,8 +632,12 @@ static void *platform_wide_char_to_utf8_allocates_on_heap(void *win32_wideString
       0
     );
 
-
-    result = (u8 *)platform_alloc_memory(bufferSize_inBytes, false);
+    if(arena) {
+        result = (u8 *)pushSize(arena, bufferSize_inBytes);
+    } else {
+        result = (u8 *)platform_alloc_memory(bufferSize_inBytes, false);
+    }
+    
 
     u32 bytesWritten = WideCharToMultiByte(
       CP_UTF8,
@@ -778,11 +784,112 @@ static char *platform_get_save_file_location_utf8(Memory_Arena *arena) {
 
     if(CreateDirectoryW((WCHAR *)buffer, 0))
     {
-
+        
     }
 
     //NOTE(ollie): Free the string
     CoTaskMemFree(win32_wideString_utf16);
+
+    return result;
+}
+
+
+inline char *easy_createString_printf(Memory_Arena *arena, char *formatString, ...) {
+
+    va_list args;
+    va_start(args, formatString);
+ 
+    char bogus[1];
+    int stringLengthToAlloc = vsnprintf(bogus, 1, formatString, args) + 1; //for null terminator, just to be sure
+    
+    char *strArray = pushArray(arena, stringLengthToAlloc, char);
+
+    vsnprintf(strArray, stringLengthToAlloc, formatString, args); 
+
+    va_end(args);
+
+    return strArray;
+}
+
+static Platform_Directory_Item *platform_build_tree_of_directory(char *uft8_top_folder, Memory_Arena *arena) {
+    Platform_Directory_Item *result = 0;
+
+    //NOTE: Build the write string for wildcard
+    char *folder_with_wildcard = easy_createString_printf(&globalPerFrameArena, "%s%s", uft8_top_folder, "\\*");
+    WCHAR *path16 = (WCHAR *)platform_utf8_to_wide_char(folder_with_wildcard, &globalPerFrameArena);
+
+    WIN32_FIND_DATAW fileFindData;
+
+    //NOTE: We call find the first file in the directory
+    HANDLE dirHandle = FindFirstFileExW(path16, FindExInfoStandard, &fileFindData, FindExSearchNameMatch, 0, 0);
+    
+    if(dirHandle != INVALID_HANDLE_VALUE) {
+        bool firstTurn = true;
+        bool has_files = true;
+
+        Platform_Directory_Item *last_item = 0;
+
+        //NOTE: keep looking while there are still files in the directory
+        while(has_files) {      
+
+            //NOTE: Since FindFirstFileExW gets the first file, we don't want to skip that one. So 
+            //      we only check if there is a file on more than one loop 
+            if(!firstTurn) {
+                has_files = FindNextFileW(dirHandle, &fileFindData);
+            } else {
+                firstTurn = false;
+            }
+
+            if(has_files) {
+                WCHAR *name = fileFindData.cFileName;
+
+                //NOTE: Convert the utf16 string to utf8 and assign it
+                u8 *file_short_name_utf8 = platform_wide_char_to_utf8_null_terminate(name, &globalPerFrameArena);
+                
+
+                //NOTE: DOn't show . folders or .. folders 
+                if(!easyString_stringsMatch_nullTerminated((char *)file_short_name_utf8, ".") && 
+                   !easyString_stringsMatch_nullTerminated((char *)file_short_name_utf8, ".." ) &&
+                   !easyString_stringsMatch_nullTerminated((char *)file_short_name_utf8, ".git" ) &&
+                   !easyString_stringsMatch_nullTerminated((char *)file_short_name_utf8, ".DS_Store" )
+                   ) {
+
+                    // char *fileName = concat(dirName, name);
+                    // char *ext = getFileExtension(fileName);
+
+                    //NOTE: Check if it is a directory or not
+                    Platform_Directory_Item *item = pushStruct(arena, Platform_Directory_Item);
+
+                    
+                    item->item_name_utf8_null_terminated = (u8 *)easy_createString_printf(&globalPerFrameArena, "%s\\%s", uft8_top_folder, file_short_name_utf8);
+
+                    //NOTE: See if it is a folder
+                    if(fileFindData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+                        item->is_folder = true;
+
+                        //NOTE: Recusive descent to find the next contents of the folder
+                        item->child = platform_build_tree_of_directory((char *)item->item_name_utf8_null_terminated, arena);
+                    }
+
+                    
+                    if(last_item) {
+                        //NOTE: Assign the next item to the last item - horizontal part of the tree
+                        last_item->next = item;
+                    }
+
+                    last_item = item;
+                }
+                
+            } else {
+                //NOTE: Stop looking for files
+                has_files = false;
+            }       
+            
+        }
+
+        //NOTE: Close the directory handle now that we're finwsihed
+        FindClose(dirHandle);
+    }
 
     return result;
 }
