@@ -860,7 +860,8 @@ static Platform_Directory_Item *platform_build_tree_of_directory(char *uft8_top_
                     //NOTE: Check if it is a directory or not
                     Platform_Directory_Item *item = pushStruct(arena, Platform_Directory_Item);
 
-                    
+                    //NOTE: Put it in a long term arena
+                    item->display_name = (u8 *)nullTerminateArena((char *)file_short_name_utf8, easyString_getSizeInBytes_utf8((char *)file_short_name_utf8), arena);
                     item->item_name_utf8_null_terminated = (u8 *)easy_createString_printf(&globalPerFrameArena, "%s\\%s", uft8_top_folder, file_short_name_utf8);
 
                     //NOTE: See if it is a folder

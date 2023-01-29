@@ -68,6 +68,7 @@ typedef struct {
 
 typedef struct {
 	Rect2f bounds_; //This is a percentage of the window
+	bool needToGetTotalBounds;
 
 	int buffer_index; //NOTE: index into all the active buffers 
 } WL_Window;
@@ -82,12 +83,12 @@ typedef struct {
 
 	Renderer renderer;
 
-	u32 active_window_index;
+	s32 active_window_index;
 
-	u32 window_count_used;
+	s32 window_count_used;
 	WL_Window windows[MAX_WINDOW_COUNT];
 
-	u32 buffer_count_used;
+	s32 buffer_count_used;
 	WL_Open_Buffer buffers_loaded[MAX_BUFFER_COUNT]; 
 
 	EditorMode mode_;
@@ -332,6 +333,8 @@ static WL_Window *open_new_window(EditorState *editorState) {
 		w->bounds_ = make_rect2f(0, 0, 1, 1);	
 	}
 
+	w->needToGetTotalBounds = true;
+
 	editorState->active_window_index = editorState->window_count_used - 1;
 
 	return w;
@@ -516,13 +519,12 @@ static EditorState *updateEditor(float dt, float windowWidth, float windowHeight
 		//TODO: Can toggle in a config file
 		editorState->should_wrap_text = true;
 		
+		//NOTE: Start with no project loaded
+		//TODO: Look up last project loaded and load late from app_data folder
 		editorState->project_tree.parent = 0;
 
 		Platform_Directory_Tree tree = {};
-
 		tree.parent = platform_build_tree_of_directory("C:\\Users\\olive\\Documents\\fantasy_game\\engine", &global_long_term_arena);
-
-		
 
 		editorState->color_palettes = init_color_palettes();
 		editorState->color_palette = editorState->color_palettes.handmade;

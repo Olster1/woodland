@@ -105,8 +105,17 @@ struct PlatformKeyState {
 //NOTE: This can be a file or a folder and can have children if it's a folder
 struct Platform_Directory_Item {
 
+    //NOTE: The items full name 
     u8 *item_name_utf8_null_terminated;
+
+    //NOTE: Short name to display
+    u8 *display_name;
+
+    //NOTE: Whether it's a folder or file
     bool is_folder;
+
+    //NOTE: Whether it's dropdown in the ui is open
+    bool is_open;
 
     Platform_Directory_Item *next;
     Platform_Directory_Item *child;

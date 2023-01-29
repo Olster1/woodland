@@ -255,20 +255,22 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 
 			float4 text_color = editorState->color_palette.standard;
 
-			if(token.type == TOKEN_INTEGER || token.type == TOKEN_FLOAT) {		
-				text_color = editorState->color_palette.variable;
-			} else if(token.type == TOKEN_STRING) {
-				text_color = editorState->color_palette.string;
-			} else if(token.type == TOKEN_OPEN_BRACKET || token.type == TOKEN_CLOSE_BRACKET || token.type == TOKEN_OPEN_SQUARE_BRACKET || token.type == TOKEN_CLOSE_SQUARE_BRACKET) {		
-				text_color = editorState->color_palette.bracket;
-			} else if(token.type == TOKEN_FUNCTION) {		
-				text_color = editorState->color_palette.function;
-			} else if(token.isKeyword || token.isType) {		
-				text_color = editorState->color_palette.keyword;
-			} else if(token.type == TOKEN_COMMENT) {		
-				text_color = editorState->color_palette.comment;
-			} else if(token.type == TOKEN_PREPROCESSOR) {		
-				text_color = editorState->color_palette.preprocessor;
+			if(drawing) {
+				if(token.type == TOKEN_INTEGER || token.type == TOKEN_FLOAT) {		
+					text_color = editorState->color_palette.variable;
+				} else if(token.type == TOKEN_STRING) {
+					text_color = editorState->color_palette.string;
+				} else if(token.type == TOKEN_OPEN_BRACKET || token.type == TOKEN_CLOSE_BRACKET || token.type == TOKEN_OPEN_SQUARE_BRACKET || token.type == TOKEN_CLOSE_SQUARE_BRACKET) {		
+					text_color = editorState->color_palette.bracket;
+				} else if(token.type == TOKEN_FUNCTION) {		
+					text_color = editorState->color_palette.function;
+				} else if(token.isKeyword || token.isType) {		
+					text_color = editorState->color_palette.keyword;
+				} else if(token.type == TOKEN_COMMENT) {		
+					text_color = editorState->color_palette.comment;
+				} else if(token.type == TOKEN_PREPROCESSOR) {		
+					text_color = editorState->color_palette.preprocessor;
+				}
 			}
 
 
@@ -338,6 +340,10 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 					//NOTE: Gone below the window view
 					if(yAt < -window_bounds.maxY) {
 						drawing = false;
+						if (!w->needToGetTotalBounds) {
+							parsing = false;
+						}	
+						
 					}
 					
 				} else {
@@ -362,6 +368,7 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 					// OutputDebugStringA(buffer);
 
 					if(drawing) {
+						
 						float2 scale = make_float2(g.width*fontScale, g.height*fontScale);
 
 						float offsetY = -0.5f*scale.y;
@@ -426,8 +433,13 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 
 		open_buffer->max_scroll_bounds.x = max_x - startX;
 
-		//both should be positive versions
-		open_buffer->max_scroll_bounds.y = get_abs_value(yAt - startY);
+
+		if (w->needToGetTotalBounds) {
+			//both should be positive versions
+			open_buffer->max_scroll_bounds.y = get_abs_value(yAt - startY);
+
+			w->needToGetTotalBounds = false;
+		}
 
 		//NOTE: Update cursor postion
 		if(memory_offset == buffer_to_draw.cursor_at) {
@@ -438,7 +450,7 @@ static void draw_wl_window(EditorState *editorState, WL_Window *w, Renderer *ren
 			got_cursor = true;
 		}
 
-		assert(got_cursor);
+		//assert(got_cursor);
 
 		//NOTE:Just active buffer logic
 		if(is_active) {
