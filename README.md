@@ -11,7 +11,14 @@ Aimed to be a text editor that:
 
 5. A cross between Sublime Text and 4Coder
 
-It's really just for me as a fun project, something to practice using Direct3d and practice getting better at programming :)
+## TODO
+The data structure to store the text for a window is currently a contiguous buffer i.e. u8 *, that reallocates when it runs out of space. It uses a gap buffer to minimize moving text when characters are added i.e. when you add a character it adds a gap of empty bytes assuming your going to write more text in the same spot. 
+
+I found this works well except it should have been seperated into the lines aswell i.e. there is a contiguous buffer for each line of text (\n) seperating each buffer. The reason for this it optimizes a some things. To work out where we should render the text we can just do (lineOn*heightOfLine). Right now we have to look through all the text counting how many \n characters we find. This is O(n) instead of O(1) in the case of storing the text in lines.
+
+It also makes moving the cursor round alot less error prone. Write know we walk backwards to find a \n character then keep walking back to find the place we should be if we press the up arrow. With storing the buffers in lines we minus 1 from the cursor position 'row'. 
+
+For Version 2 of this project I'm going to do that, store the text as seperate lines, then each line will implement a gap buffer. 
 
 ## Roadmap
 - [x] Render text using d3d 11
